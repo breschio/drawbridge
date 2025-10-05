@@ -3076,15 +3076,20 @@ Press \`Cmd+Shift+P\` (Mac) or \`Ctrl+Shift+P\` (Windows) to reconnect.
             drawRect.style.display = 'none';
           }
 
-          // Capture the entire viewport
-          const canvas = await html2canvas(document.body, {
+          // Capture only the visible viewport (not the entire document)
+          // This ensures the screenshot shows exactly what the user sees
+          const canvas = await html2canvas(document.documentElement, {
             backgroundColor: null,
             scale: Math.min(window.devicePixelRatio || 1, 2),
             logging: false,
             width: window.innerWidth,
             height: window.innerHeight,
-            x: window.scrollX,
-            y: window.scrollY,
+            windowWidth: window.innerWidth,
+            windowHeight: window.innerHeight,
+            scrollX: 0,  // Capture from viewport origin, not scroll position
+            scrollY: 0,  // Capture from viewport origin, not scroll position
+            x: window.scrollX,  // Start capture at current scroll position
+            y: window.scrollY,  // Start capture at current scroll position
             useCORS: true,
             allowTaint: false
           });
