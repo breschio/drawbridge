@@ -7,6 +7,13 @@
   let projectRoot = null;
   let markdownFileHandle = null; // Handle for moat-tasks.md
 
+  // Draw mode state variables
+  let drawMode = false;
+  let isDrawing = false;
+  let drawStartPoint = null;
+  let drawRect = null;
+  let drawnAnnotation = null;
+
   // Generate unique session ID
   const sessionId = `moat-session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -2959,6 +2966,197 @@ Press \`Cmd+Shift+P\` (Mac) or \`Ctrl+Shift+P\` (Windows) to reconnect.
     }
   }
 
+  // Create comment box for drawing mode
+  function createCommentBoxForDrawing(x, y) {
+    // If comment box already exists, shake it instead of creating new one
+    if (commentBox) {
+      shakeCommentBox();
+      return;
+    }
+
+    commentBox = document.createElement('div');
+    commentBox.className = 'float-comment-box';
+    commentBox.innerHTML = `
+      <textarea
+        class="float-comment-input"
+        placeholder="What needs to be fixed?"
+        autofocus
+      ></textarea>
+      <div class="float-comment-actions">
+        <button class="float-comment-cancel">Cancel</button>
+        <button class="float-comment-submit">Submit (Enter)</button>
+      </div>
+    `;
+
+    document.body.appendChild(commentBox);
+
+    // Position near cursor
+    const boxWidth = 320;
+    const boxHeight = 120;
+    const padding = 10;
+
+    let left = x + padding;
+    let top = y + padding;
+
+    // Ensure comment box stays within viewport boundaries
+    if (left + boxWidth > window.innerWidth) {
+      left = x - boxWidth - padding;
+    }
+    if (top + boxHeight > window.innerHeight) {
+      top = y - boxHeight - padding;
+    }
+    if (left < padding) {
+      left = padding;
+    }
+    if (top < padding) {
+      top = padding;
+    }
+
+    commentBox.style.left = `${left}px`;
+    commentBox.style.top = `${top}px`;
+
+    // Final adjustment
+    const boxRect = commentBox.getBoundingClientRect();
+    if (boxRect.right > window.innerWidth) {
+      commentBox.style.left = `${window.innerWidth - boxRect.width - padding}px`;
+    }
+    if (boxRect.bottom > window.innerHeight) {
+      commentBox.style.top = `${window.innerHeight - boxRect.height - padding}px`;
+    }
+
+    const textarea = commentBox.querySelector('textarea');
+    const submitBtn = commentBox.querySelector('.float-comment-submit');
+    const cancelBtn = commentBox.querySelector('.float-comment-cancel');
+
+    setTimeout(() => textarea.focus(), 50);
+
+    // Handle submit
+    const handleSubmit = async () => {
+      const content = textarea.value.trim();
+      if (!content) return;
+
+      if (!drawnAnnotation) {
+        console.error('No drawn annotation found');
+        return;
+      }
+
+      // Create annotation object for drawing mode
+      const annotation = {
+        type: "user_message",
+        role: "user",
+        content: content,
+        target: "viewport",
+        annotationType: "drawing",
+        drawingCoords: {
+          x: drawnAnnotation.x,
+          y: drawnAnnotation.y,
+          width: drawnAnnotation.width,
+          height: drawnAnnotation.height
+        },
+        boundingRect: {
+          x: Math.round(drawnAnnotation.x),
+          y: Math.round(drawnAnnotation.y),
+          width: Math.round(drawnAnnotation.width),
+          height: Math.round(drawnAnnotation.height)
+        },
+        pageUrl: window.location.href,
+        timestamp: Date.now(),
+        sessionId: sessionId,
+        status: "to do",
+        id: `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      };
+
+      // Capture full viewport screenshot with annotation drawn on it
+      if (window.html2canvas) {
+        try {
+          console.log('📸 Moat: Capturing viewport screenshot with annotation...');
+
+          // Temporarily hide the DOM rectangle element before screenshot
+          if (drawRect) {
+            drawRect.style.display = 'none';
+          }
+
+          // Capture the entire viewport
+          const canvas = await html2canvas(document.body, {
+            backgroundColor: null,
+            scale: Math.min(window.devicePixelRatio || 1, 2),
+            logging: false,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            x: window.scrollX,
+            y: window.scrollY,
+            useCORS: true,
+            allowTaint: false
+          });
+
+          // Restore the rectangle visibility (though it will be removed soon)
+          if (drawRect) {
+            drawRect.style.display = 'block';
+          }
+
+          // Draw the hot pink rectangle annotation on the canvas
+          const ctx = canvas.getContext('2d');
+          const scale = Math.min(window.devicePixelRatio || 1, 2);
+
+          ctx.strokeStyle = 'hotpink';
+          ctx.lineWidth = 4 * scale;
+          ctx.lineJoin = 'round';
+
+          // Calculate rectangle position relative to viewport
+          const rectX = (drawnAnnotation.x - window.scrollX) * scale;
+          const rectY = (drawnAnnotation.y - window.scrollY) * scale;
+          const rectWidth = drawnAnnotation.width * scale;
+          const rectHeight = drawnAnnotation.height * scale;
+          const borderRadius = 8 * scale;
+
+          // Draw rounded rectangle
+          ctx.beginPath();
+          ctx.moveTo(rectX + borderRadius, rectY);
+          ctx.lineTo(rectX + rectWidth - borderRadius, rectY);
+          ctx.quadraticCurveTo(rectX + rectWidth, rectY, rectX + rectWidth, rectY + borderRadius);
+          ctx.lineTo(rectX + rectWidth, rectY + rectHeight - borderRadius);
+          ctx.quadraticCurveTo(rectX + rectWidth, rectY + rectHeight, rectX + rectWidth - borderRadius, rectY + rectHeight);
+          ctx.lineTo(rectX + borderRadius, rectY + rectHeight);
+          ctx.quadraticCurveTo(rectX, rectY + rectHeight, rectX, rectY + rectHeight - borderRadius);
+          ctx.lineTo(rectX, rectY + borderRadius);
+          ctx.quadraticCurveTo(rectX, rectY, rectX + borderRadius, rectY);
+          ctx.closePath();
+          ctx.stroke();
+
+          annotation.screenshot = canvas.toDataURL('image/png');
+          console.log('✅ Moat: Screenshot with annotation captured successfully');
+        } catch (e) {
+          console.error('❌ Moat: Screenshot capture failed:', e);
+          showNotification('Screenshot capture failed - task saved without image', 'warning');
+        }
+      } else {
+        console.error('❌ Moat: html2canvas not available');
+        showNotification('Screenshot library not loaded - task saved without image', 'warning');
+      }
+
+      addToQueue(annotation);
+      exitDrawMode();
+    };
+
+    // Event listeners
+    submitBtn.addEventListener('click', handleSubmit);
+    cancelBtn.addEventListener('click', () => {
+      // Cancel removes the annotation and exits draw mode
+      removeDrawRect();
+      exitDrawMode();
+    });
+
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      } else if (e.key === 'Escape') {
+        removeDrawRect();
+        exitDrawMode();
+      }
+    });
+  }
+
   // Enter comment mode
   function enterCommentMode() {
     commentMode = true;
@@ -2971,6 +3169,39 @@ Press \`Cmd+Shift+P\` (Mac) or \`Ctrl+Shift+P\` (Windows) to reconnect.
     document.body.classList.remove('float-comment-mode');
     removeCommentBox();
     removeHighlight();
+  }
+
+  // Enter draw mode
+  function enterDrawMode() {
+    // Exit comment mode if active
+    if (commentMode) {
+      exitCommentMode();
+    }
+
+    drawMode = true;
+    document.body.classList.add('float-draw-mode');
+    document.body.style.cursor = 'crosshair';
+    showNotification('Draw a rectangle to annotate', 'info');
+  }
+
+  // Exit draw mode
+  function exitDrawMode() {
+    drawMode = false;
+    isDrawing = false;
+    drawStartPoint = null;
+    drawnAnnotation = null;
+    document.body.classList.remove('float-draw-mode');
+    document.body.style.cursor = '';
+    removeDrawRect();
+    removeCommentBox();
+  }
+
+  // Remove draw rectangle
+  function removeDrawRect() {
+    if (drawRect) {
+      drawRect.remove();
+      drawRect = null;
+    }
   }
 
   // Highlight element on hover
@@ -3027,16 +3258,116 @@ Press \`Cmd+Shift+P\` (Mac) or \`Ctrl+Shift+P\` (Windows) to reconnect.
   // Click handler
   document.addEventListener('click', (e) => {
     if (!commentMode) return;
-    
+
     const element = e.target;
     if (element.closest('.float-comment-box') || element.closest('.float-moat')) {
       return;
     }
-    
+
     e.preventDefault();
     e.stopPropagation();
-    
+
     createCommentBox(element, e.clientX, e.clientY);
+  }, true);
+
+  // Draw mode: mousedown handler
+  document.addEventListener('mousedown', (e) => {
+    if (!drawMode || commentBox) return; // Don't start drawing if comment box is open
+
+    // Ignore clicks on UI elements
+    if (e.target.closest('.float-comment-box') || e.target.closest('.float-moat')) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    isDrawing = true;
+    drawStartPoint = {
+      x: e.clientX + window.scrollX,
+      y: e.clientY + window.scrollY
+    };
+
+    // Create the draw rectangle element
+    if (!drawRect) {
+      drawRect = document.createElement('div');
+      drawRect.className = 'float-draw-rect';
+      drawRect.style.position = 'absolute';
+      drawRect.style.border = '4px solid hotpink';
+      drawRect.style.borderRadius = '8px';
+      drawRect.style.pointerEvents = 'none';
+      drawRect.style.zIndex = '999999';
+      drawRect.style.boxSizing = 'border-box';
+      document.body.appendChild(drawRect);
+    }
+
+    // Set initial position
+    drawRect.style.left = `${drawStartPoint.x}px`;
+    drawRect.style.top = `${drawStartPoint.y}px`;
+    drawRect.style.width = '0px';
+    drawRect.style.height = '0px';
+  }, true);
+
+  // Draw mode: mousemove handler
+  document.addEventListener('mousemove', (e) => {
+    if (!drawMode || !isDrawing || !drawRect || !drawStartPoint) return;
+
+    const currentX = e.clientX + window.scrollX;
+    const currentY = e.clientY + window.scrollY;
+
+    // Calculate rectangle bounds (support dragging in any direction)
+    const left = Math.min(drawStartPoint.x, currentX);
+    const top = Math.min(drawStartPoint.y, currentY);
+    const width = Math.abs(currentX - drawStartPoint.x);
+    const height = Math.abs(currentY - drawStartPoint.y);
+
+    // Update the rectangle
+    drawRect.style.left = `${left}px`;
+    drawRect.style.top = `${top}px`;
+    drawRect.style.width = `${width}px`;
+    drawRect.style.height = `${height}px`;
+  });
+
+  // Draw mode: mouseup handler
+  document.addEventListener('mouseup', (e) => {
+    if (!drawMode || !isDrawing || !drawRect || !drawStartPoint) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const currentX = e.clientX + window.scrollX;
+    const currentY = e.clientY + window.scrollY;
+
+    // Calculate final rectangle bounds
+    const left = Math.min(drawStartPoint.x, currentX);
+    const top = Math.min(drawStartPoint.y, currentY);
+    const width = Math.abs(currentX - drawStartPoint.x);
+    const height = Math.abs(currentY - drawStartPoint.y);
+
+    // Validate minimum size (4x4px)
+    if (width < 4 || height < 4) {
+      showNotification('Rectangle too small (minimum 4x4px)', 'warning');
+      isDrawing = false;
+      drawStartPoint = null;
+      removeDrawRect();
+      return;
+    }
+
+    // Store the drawn annotation
+    drawnAnnotation = {
+      x: left,
+      y: top,
+      width: width,
+      height: height
+    };
+
+    isDrawing = false;
+
+    // Show comment box at a smart position
+    const commentBoxX = e.clientX;
+    const commentBoxY = e.clientY;
+
+    createCommentBoxForDrawing(commentBoxX, commentBoxY);
   }, true);
 
   // Global variables for new notification system
@@ -3048,26 +3379,46 @@ Press \`Cmd+Shift+P\` (Mac) or \`Ctrl+Shift+P\` (Windows) to reconnect.
     // Enter comment mode with 'C' key (updated from 'f')
     if ((e.key === 'C' || e.key === 'c') && !commentMode && !e.target.matches('input, textarea')) {
       e.preventDefault();
-      
+
       // Dispatch event to remove persistent notification
       window.dispatchEvent(new CustomEvent('moat:c-key-pressed'));
-      
+
       // Mark that C has been pressed
       if (!hasPressedC) {
         hasPressedC = true;
         // Show the click instruction notification
         showNotification('Click anywhere to comment', 'info', 'click-instruction');
       }
-      
+
       enterCommentMode();
     }
-    
+
+    // Enter draw mode with 'D' key
+    if ((e.key === 'D' || e.key === 'd') && !drawMode && !e.target.matches('input, textarea')) {
+      e.preventDefault();
+      enterDrawMode();
+    }
+
     // Exit comment mode with Escape
     if (e.key === 'Escape' && commentMode) {
       e.preventDefault();
       exitCommentMode();
     }
-    
+
+    // Exit draw mode with Escape (clears in-progress drawing or exits mode)
+    if (e.key === 'Escape' && drawMode) {
+      e.preventDefault();
+      if (isDrawing) {
+        // Just clear the in-progress rectangle, stay in draw mode
+        isDrawing = false;
+        drawStartPoint = null;
+        removeDrawRect();
+      } else {
+        // Exit draw mode entirely
+        exitDrawMode();
+      }
+    }
+
     // Toggle sidebar with Cmd+Shift+F
     if (e.key === 'f' && e.metaKey && e.shiftKey) {
       e.preventDefault();

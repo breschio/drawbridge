@@ -9,15 +9,14 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://localhost:*/*",
-    "https://localhost:*/*"
+    "<all_urls>"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
   },
   "content_scripts": [
     {
-      "matches": ["http://localhost:*/*", "https://localhost:*/*"],
+      "matches": ["<all_urls>"],
       "js": [
         "html2canvas.min.js",
         "utils/persistence.js",
@@ -48,12 +47,12 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "icons/db-logo-light.png", 
+        "icons/db-logo-light.png",
         "icons/db-logo-dark.png",
         "rules-templates/drawbridge-workflow.mdc",
         "rules-templates/README.md"
       ],
-      "matches": ["http://localhost:*/*", "https://localhost:*/*"]
+      "matches": ["<all_urls>"]
     }
   ]
 } 
