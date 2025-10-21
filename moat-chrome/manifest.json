@@ -50,7 +50,7 @@
       "resources": [
         "icons/db-logo-light.png", 
         "icons/db-logo-dark.png",
-        "rules-templates/drawbridge-workflow.mdc",
+        "rules-templates/drawbridge-workflow.md",
         "rules-templates/README.md"
       ],
       "matches": ["http://localhost:*/*", "https://localhost:*/*"]

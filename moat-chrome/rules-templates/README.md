@@ -13,7 +13,7 @@ Moat is now connected to your project! This directory contains everything you ne
 ### 2. Process Annotations with AI
 In Cursor, run this command to process your UI feedback:
 ```
-Use @.moat/drawbridge-workflow.mdc
+Use @.moat/drawbridge-workflow.md
 ```
 
 The AI will:
@@ -24,7 +24,7 @@ The AI will:
 
 ## 📁 Files in This Directory
 
-- **`drawbridge-workflow.mdc`** - Unified intelligent workflow for processing UI tasks  
+- **`drawbridge-workflow.md`** - Unified intelligent workflow for processing UI tasks  
 - **`moat-tasks.md`** - Your current task list (auto-generated)
 - **`moat-tasks-detail.json`** - Technical task data (auto-generated)
 - **`config.json`** - Moat settings for this project
@@ -32,7 +32,7 @@ The AI will:
 ## 🎯 Example Workflow
 
 1. **Annotate**: Click a button → "make this green and bigger"
-2. **Process**: Run `Use @.moat/drawbridge-workflow.mdc` or just `bridge`
+2. **Process**: Run `Use @.moat/drawbridge-workflow.md` or just `bridge`
 3. **AI Analyzes**: Chooses optimal mode and handles dependencies
 4. **Review**: Shows changes with visual context and waits for approval
 5. **Approve**: Type "yes" to apply the changes
@@ -100,7 +100,7 @@ Review @.moat/moat-tasks.md
 ```
 
 ### Custom Instructions
-You can edit `drawbridge-workflow.mdc` to customize how Drawbridge processes your specific project.
+You can edit `drawbridge-workflow.md` to customize how Drawbridge processes your specific project.
 
 ## 🎨 Best Practices
 
@@ -142,7 +142,7 @@ Edit `config.json` to customize Moat for your project:
 1. Check your task list: `@.moat/moat-tasks.md`
 2. Try different processing modes: `step bridge`, `batch bridge`, `yolo bridge`
 3. Review this README for examples
-4. Edit `drawbridge-workflow.mdc` for custom behavior
+4. Edit `drawbridge-workflow.md` for custom behavior
 
 ## 🌟 Tips for Success
 
