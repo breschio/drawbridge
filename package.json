@@ -1,6 +1,6 @@
 {
   "name": "moat",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Moat - Visual UI feedback with markdown task logging",
   "main": "moat-watcher.js",
   "scripts": {
