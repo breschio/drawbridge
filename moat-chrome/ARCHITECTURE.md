@@ -26,7 +26,7 @@ User Project Directory (ANY name)
     ├── config.json           # Project-specific settings
     ├── moat-tasks.md         # Human-readable task list
     ├── moat-tasks-detail.json # Machine-readable task data
-    ├── drawbridge-workflow.mdc # Unified AI workflow rule (deployed automatically)
+    ├── drawbridge-workflow.md # Unified AI workflow rule (deployed automatically)
     ├── README.md             # Project-specific guide (deployed automatically)
     └── screenshots/          # Task screenshots (created as needed)
 ```
@@ -89,7 +89,7 @@ window.directoryHandle = moatDir;
 ```javascript
 // Templates are embedded in extension code
 const templates = {
-  'drawbridge-workflow.mdc': `# Drawbridge Workflow: Complete Rules...`,
+  'drawbridge-workflow.md': `# Drawbridge Workflow: Complete Rules...`,
   'README.md': `# Moat - Connected to ${dirHandle.name}...`
 };
 
