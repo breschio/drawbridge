@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Drawbridge - Visual editor for Cursor",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Send comments and screenshots directly to Cursor as prompts.",
   "permissions": [
     "activeTab",
