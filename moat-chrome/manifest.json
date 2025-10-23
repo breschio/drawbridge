@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Drawbridge - Visual editor for Cursor",
-  "version": "1.0.1",
-  "description": "Send comments and screenshots directly to Cursor as prompts.",
+  "name": "Drawbridge - Visual editor for AI coding assistants",
+  "version": "1.0.3",
+  "description": "Send comments and screenshots directly to Cursor and Claude Code as prompts.",
   "permissions": [
     "activeTab",
     "storage",
@@ -48,10 +48,11 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "icons/db-logo-light.png", 
+        "icons/db-logo-light.png",
         "icons/db-logo-dark.png",
         "rules-templates/drawbridge-workflow.md",
-        "rules-templates/README.md"
+        "rules-templates/README.md",
+        "rules-templates/bridge.md"
       ],
       "matches": ["http://localhost:*/*", "https://localhost:*/*"]
     }

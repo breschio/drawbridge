@@ -186,6 +186,7 @@ Use @moat-auto-fix.md for immediate implementation
 - **Screenshot Capture**: Automatically captures element screenshots
 - **🆕 Cursor Streaming**: Real-time sync to your project directory
 - **🆕 Markdown Task Reading**: Displays tasks from connected project files
+- **🆕 Claude Code Support**: Automatically deploys `/bridge` command to `.claude/commands/`
 
 ## 🎯 Element Selection
 
