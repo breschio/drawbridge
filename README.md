@@ -48,8 +48,12 @@ Make comments in the browser (like in Figma) and send them to Cursor.  This chro
 
 
 
-🤖 4. Make Cursor do it
+🤖 4. Process with AI
 -----------------------
+
+Drawbridge works with **Cursor** and **Claude Code**:
+
+### In Cursor
 
 1.  **Run Drawbridge**: In your editor, simply run the command:
 
@@ -69,8 +73,29 @@ Make comments in the browser (like in Figma) and send them to Cursor.  This chro
 
 5. IF you run into trouble with "bridge" simply be more explicit by saying "use @drawbridge-workflow.mdc to process @moat-tasks.mdc"
 
-
 ![db-process-tasks](https://github.com/user-attachments/assets/da71b412-eee4-4cec-abe5-3b9719e297b2)
+
+### In Claude Code
+
+1.  **Run the slash command** (works in terminal or Cursor with Claude Code):
+
+    ```
+    /bridge
+    ```
+
+2.  **Choose mode**: Claude will ask for your preferred processing mode:
+    -   **step**: One task at a time with approval
+    -   **batch**: Group related tasks together
+    -   **yolo**: Process all tasks autonomously
+
+3.  **Automatic Setup**: The `/bridge` command is automatically deployed to `.claude/commands/` when you connect your project
+
+**Claude Code Features:**
+-   ✅ **Smart error messages** - Helpful guidance if tasks aren't found
+-   ✅ **File references** - Tasks include file paths for easy navigation
+-   ✅ **Screenshot support** - Visual context from browser annotations
+-   ✅ **Git-safe** - Automatically adds `.claude/` and `.moat/` to `.gitignore`
+-   ✅ **Status tracking** - Follows `"to do" → "doing" → "done"` lifecycle
 
 
 👩🏼‍🎨 5. Review your changes

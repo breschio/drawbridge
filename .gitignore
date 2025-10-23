@@ -67,3 +67,4 @@ coverage/
 .yarn-integrity 
 # Drawbridge project-specific files
 .moat/
+.claude/

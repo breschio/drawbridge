@@ -103,11 +103,19 @@ function generateMarkdownFromTasks(tasks) {
             const taskNumber = index + 1;
             const title = task.title || 'Untitled Task';
             const comment = truncateComment(task.comment);
-            
+
             markdown += `${taskNumber}. ${checkbox} ${title}`;
             if (comment) {
                 markdown += ` – "${comment}"`;
             }
+
+            // Add file reference for Claude Code (if available)
+            if (task.targetFile) {
+                markdown += ` \`${task.targetFile}\``;
+            } else if (task.selector) {
+                markdown += ` \`${task.selector}\``;
+            }
+
             markdown += '\n';
         });
     }

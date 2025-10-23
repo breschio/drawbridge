@@ -11,9 +11,16 @@ Moat is now connected to your project! This directory contains everything you ne
 4. **Press Enter** to save the annotation
 
 ### 2. Process Annotations with AI
-In Cursor, run this command to process your UI feedback:
+
+**In Cursor:**
 ```
 Use @.moat/drawbridge-workflow.md
+```
+Or simply type: `bridge`
+
+**In Claude Code:**
+```
+/bridge
 ```
 
 The AI will:
