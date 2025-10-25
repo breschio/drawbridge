@@ -192,12 +192,3 @@ You can control how Drawbridge processes tasks by specifying a mode.
 -   **Connection Issues**: If Drawbridge can't find tasks, press `Cmd/Ctrl+Shift+P` in your browser and re-select your project directory to reconnect.
 
 **Happy building with Drawbridge!** 🎯
-
-🙏 Acknowledgements
--------------------
-
-Special thanks to the collaborators and community members who helped improve screenshot reliability and modern color support:
-
-- @breschio – for maintaining the project and reviews
-- @jankowtf – for the screenshot persistence reliability fixes and test harness improvements
-- @falkfrentzen – for reporting and validating the modern color model issue and suggesting `html2canvas-pro`
