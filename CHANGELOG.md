@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2025-10-25
+
+### Added
+- **Claude Code Integration**: Full support for Claude Code via `/bridge` slash command
+- Auto-deployment of `.claude/commands/bridge.md` on project connection
+- Automatic `.claude/settings.local.json` permission configuration
+- Smart file path detection (checks `.moat/`, root, parent directories)
+- Processing mode selection UI (step/batch/yolo)
+- Enhanced error messages with setup instructions for Claude Code users
+
+### Fixed
+- Test script configuration in package.json
+- Demo path corrected from `start-here` to `demo`
+- Version synchronization between package.json and manifest.json
+
+### Improved
+- Cross-platform compatibility (works with both Cursor and Claude Code)
+- Screenshot path resolution in both AI assistants
+- Documentation for dual-tool workflows
+
 ## [1.0.2] - 2025-10-21
 
 ### Changed
