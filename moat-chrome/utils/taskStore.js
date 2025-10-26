@@ -361,15 +361,71 @@ class TaskStore {
 
     /**
      * Remove task by ID and automatically save to file
+     * Also deletes the associated screenshot file if it exists
      * @param {string} id - Task ID to remove
      * @returns {Promise<boolean>} Promise resolving to removal success status
      */
     async removeTaskAndSave(id) {
+        // Get the task before removing it so we can delete its screenshot
+        const task = this.getTaskById(id);
+
+        if (!task) {
+            console.warn(`Task not found for removal: ${id}`);
+            return false;
+        }
+
+        // Delete screenshot file if it exists
+        if (task.screenshotPath && this.directoryHandle) {
+            await this.deleteScreenshotFile(task.screenshotPath);
+        }
+
+        // Remove the task from memory
         const removed = this.removeTask(id);
+
+        // Save the updated task list to file
         if (removed) {
             await this.saveTasksToFile();
         }
+
         return removed;
+    }
+
+    /**
+     * Delete a screenshot file from the filesystem
+     * @param {string} screenshotPath - Relative path to screenshot (e.g., "./screenshots/task-id.png")
+     * @returns {Promise<boolean>} Promise resolving to deletion success status
+     */
+    async deleteScreenshotFile(screenshotPath) {
+        if (!this.directoryHandle) {
+            console.warn('Cannot delete screenshot: no directory handle');
+            return false;
+        }
+
+        try {
+            // Parse the path to get the filename
+            // screenshotPath format: "./screenshots/filename.png"
+            const fileName = screenshotPath.replace(/^\.\/screenshots\//, '');
+
+            if (!fileName || fileName === screenshotPath) {
+                console.warn(`Invalid screenshot path format: ${screenshotPath}`);
+                return false;
+            }
+
+            // Get the screenshots directory
+            const screenshotsDir = await this.directoryHandle.getDirectoryHandle('screenshots', { create: false });
+
+            // Delete the file
+            await screenshotsDir.removeEntry(fileName);
+            console.log(`Successfully deleted screenshot: ${fileName}`);
+            return true;
+        } catch (error) {
+            if (error.name === 'NotFoundError') {
+                console.warn(`Screenshot file not found: ${screenshotPath}`);
+            } else {
+                console.error(`Error deleting screenshot file:`, error);
+            }
+            return false;
+        }
     }
 
     /**
