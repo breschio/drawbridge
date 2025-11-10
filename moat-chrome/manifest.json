@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Drawbridge - Visual editor for AI coding assistants",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Send comments and screenshots directly to Cursor and Claude Code as prompts.",
   "permissions": [
     "activeTab",
@@ -9,15 +9,14 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://localhost:*/*",
-    "https://localhost:*/*"
+    "<all_urls>"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
   },
   "content_scripts": [
     {
-      "matches": ["http://localhost:*/*", "https://localhost:*/*"],
+      "matches": ["<all_urls>"],
       "js": [
         "html2canvas.min.js",
         "utils/persistence.js",
@@ -54,7 +53,7 @@
         "rules-templates/README.md",
         "rules-templates/bridge.md"
       ],
-      "matches": ["http://localhost:*/*", "https://localhost:*/*"]
+      "matches": ["<all_urls>"]
     }
   ]
 } 
