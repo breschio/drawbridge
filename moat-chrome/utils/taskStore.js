@@ -429,6 +429,50 @@ class TaskStore {
     }
 
     /**
+     * Delete screenshots from all completed tasks
+     * @returns {Promise<Object>} Promise resolving to cleanup results
+     */
+    async deleteCompletedScreenshots() {
+        if (!this.directoryHandle) {
+            console.warn('Cannot delete screenshots: no directory handle');
+            return { success: false, deletedCount: 0, errors: [] };
+        }
+
+        const completedTasks = this.tasks.filter(task => task.status === 'done');
+        const tasksWithScreenshots = completedTasks.filter(task => task.screenshotPath);
+        
+        if (tasksWithScreenshots.length === 0) {
+            return { success: true, deletedCount: 0, message: 'No screenshots to delete' };
+        }
+
+        let deletedCount = 0;
+        const errors = [];
+
+        for (const task of tasksWithScreenshots) {
+            const deleted = await this.deleteScreenshotFile(task.screenshotPath);
+            if (deleted) {
+                // Clear the screenshot path from the task
+                task.screenshotPath = '';
+                deletedCount++;
+            } else {
+                errors.push(task.id);
+            }
+        }
+
+        // Save updated tasks (with cleared screenshot paths)
+        if (deletedCount > 0) {
+            await this.saveTasksToFile();
+        }
+
+        return {
+            success: true,
+            deletedCount,
+            totalCompleted: completedTasks.length,
+            errors
+        };
+    }
+
+    /**
      * Create backup of current tasks before risky operations
      * @returns {Promise<boolean>} Promise resolving to backup success
      */
