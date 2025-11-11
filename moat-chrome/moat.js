@@ -1218,13 +1218,64 @@
     });
   }
 
+  // Close all open menus
+  function closeAllMenus() {
+    const projectMenu = document.querySelector('.float-project-menu');
+    const moreMenu = document.querySelector('.float-more-menu');
+    if (projectMenu) projectMenu.remove();
+    if (moreMenu) moreMenu.remove();
+  }
+
+  // Shared function for positioning menus with smart placement
+  function positionMenu(menu, button) {
+    const rect = button.getBoundingClientRect();
+    
+    // Append menu off-screen first to measure its height
+    menu.style.position = 'fixed';
+    menu.style.top = '-9999px';
+    menu.style.right = '0';
+    menu.style.opacity = '0';
+    menu.style.transform = 'translateY(-8px) scale(0.95)';
+    document.body.appendChild(menu);
+    
+    // Get actual menu height
+    const menuHeight = menu.offsetHeight || 200; // Fallback estimate
+    
+    // Calculate position above button, ensuring it doesn't go off-screen
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const maxHeight = Math.min(menuHeight, spaceAbove - 10, window.innerHeight - 20);
+    
+    // Always use 4px spacing (ensures 4px from top of plugin drawer when docked at bottom)
+    const spacing = 4;
+    
+    if (spaceAbove >= menuHeight + spacing || spaceAbove > spaceBelow) {
+      // Position above the button with 4px spacing
+      menu.style.top = `${rect.top - menuHeight - spacing}px`;
+      menu.style.maxHeight = `${maxHeight}px`;
+      menu.style.transformOrigin = 'bottom right';
+    } else {
+      // If not enough space above, position below but ensure it's scrollable
+      menu.style.top = `${rect.bottom + spacing}px`;
+      menu.style.maxHeight = `${Math.min(menuHeight, window.innerHeight - rect.bottom - 20)}px`;
+      menu.style.transformOrigin = 'top right';
+    }
+    
+    menu.style.right = `${window.innerWidth - rect.right}px`;
+    menu.style.minWidth = `${rect.width}px`;
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      menu.style.transition = 'opacity 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      menu.style.opacity = '1';
+      menu.style.transform = 'translateY(0) scale(1)';
+    });
+  }
+
   // Show project menu
   function showProjectMenu() {
-    // Remove any existing menus
-    const existingMenu = document.querySelector('.float-project-menu');
-    if (existingMenu) {
-      existingMenu.remove();
-    }
+    // Close all menus first to ensure only one is open at a time
+    closeAllMenus();
     
     const menu = document.createElement('div');
     menu.className = 'float-project-menu';
@@ -1251,7 +1302,7 @@
           <rect x="8" y="15" width="8" height="2"/>
         </svg>
         <span>Clear screenshots</span>
-        <span class="float-badge" id="clearScreenshotsBadge" style="margin-left: auto; display: none;"></span>
+        <span class="float-badge clear-screenshots-badge" id="clearScreenshotsBadge" style="margin-left: auto; display: none;"></span>
       </div>
       <div class="float-project-menu-item float-project-menu-divider" data-action="disconnect">
         <svg style="width: 12px; height: 12px; fill: #DC2626;" viewBox="0 0 24 24">
@@ -1276,30 +1327,8 @@
       return;
     }
     
-    const rect = button.getBoundingClientRect();
-    
-    // When docked at bottom, position menu above the button
-    if (moatPosition === 'bottom') {
-      // Append menu off-screen first to measure its height
-      menu.style.position = 'fixed';
-      menu.style.top = '-9999px';
-      menu.style.right = '0';
-      document.body.appendChild(menu);
-      
-      // Get actual menu height
-      const menuHeight = menu.offsetHeight || 200; // Fallback estimate
-      
-      // Position above the button
-      menu.style.top = `${rect.top - menuHeight - 4}px`;
-      menu.style.right = `${window.innerWidth - rect.right}px`;
-      menu.style.minWidth = `${rect.width}px`;
-    } else {
-      // Position below for side-docked positions
-      menu.style.top = `${rect.bottom + 4}px`;
-      menu.style.right = `${window.innerWidth - rect.right}px`;
-      menu.style.minWidth = `${rect.width}px`;
-      document.body.appendChild(menu);
-    }
+    // Use shared positioning function
+    positionMenu(menu, button);
     
     // Update badge count for clear screenshots option
     if (canUseNewTaskSystem() && window.taskStore) {
@@ -1342,11 +1371,8 @@
 
   // Show more menu
   function showMoreMenu() {
-    // Remove any existing menus
-    const existingMenu = document.querySelector('.float-more-menu');
-    if (existingMenu) {
-      existingMenu.remove();
-    }
+    // Close all menus first to ensure only one is open at a time
+    closeAllMenus();
     
     // Determine current position and mode states
     const currentPosition = moatPosition;
@@ -1452,19 +1478,15 @@
     menu.className = 'float-more-menu';
     menu.innerHTML = menuHTML;
     
-    // Position menu below button
+    // Position menu using shared positioning function
     const button = moat.querySelector('.float-moat-more-btn');
     if (!button) {
       console.warn('Could not find more button');
       return;
     }
     
-    const rect = button.getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.right = `${window.innerWidth - rect.right}px`;
-    menu.style.minWidth = `${rect.width}px`;
-    
-    document.body.appendChild(menu);
+    // Use shared positioning function
+    positionMenu(menu, button);
     
     // Handle menu clicks
     menu.addEventListener('click', (e) => {

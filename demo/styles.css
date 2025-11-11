@@ -154,6 +154,12 @@ img { display: block; max-width: 100%; }
 .example { padding: 46px 0; background: #fafafa; border-top: 1px solid var(--border); }
 .example-inner { display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 24px; align-items: center; }
 .example-copy p { color: var(--muted); }
+.example-copy h2 {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-alt) 50%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 .example-controls { display: flex; gap: 10px; margin-top: 10px; }
 .example-visual { display: flex; justify-content: center; }
 .example-card { width: 420px; border: 1px solid var(--border); border-radius: 16px; padding: 18px; background: #fff; box-shadow: 0 8px 22px var(--shadow); }

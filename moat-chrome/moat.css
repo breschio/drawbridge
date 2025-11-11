@@ -1818,8 +1818,10 @@ body.float-comment-mode * {
   border-radius: 8px;
   box-shadow: 0 4px 12px var(--moat-shadow);
   z-index: 10003;
-  overflow: hidden;
-  min-width: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 20px);
+  min-width: 220px;
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -1832,6 +1834,17 @@ body.float-comment-mode * {
   align-items: center;
   gap: 10px;
   transition: background 0.2s;
+  min-width: 0; /* Allow flex items to shrink if needed */
+}
+
+.float-project-menu-item > span:not(.float-badge) {
+  flex: 1;
+  text-align: left;
+}
+
+.float-project-menu-item span:last-child {
+  margin-left: auto;
+  flex-shrink: 0; /* Prevent badge from shrinking */
 }
 
 .float-project-menu-item:hover {
@@ -1867,6 +1880,25 @@ body.float-comment-mode * {
   text-align: center;
 }
 
+/* Badge for clear screenshots (orange, matching to-do items) */
+.float-badge.clear-screenshots-badge {
+  background: #F59E0B;
+  color: white;
+  /* Ensure circular shape - equal width and height for single digits */
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  /* For single digits, make it perfectly circular */
+  width: auto;
+  height: 20px;
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
 /* More Menu */
 .float-more-menu {
   position: fixed;
@@ -1875,7 +1907,9 @@ body.float-comment-mode * {
   border-radius: 8px;
   box-shadow: 0 4px 12px var(--moat-shadow);
   z-index: 10003;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 20px);
   min-width: 160px;
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
