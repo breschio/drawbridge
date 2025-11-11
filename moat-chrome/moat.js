@@ -1243,6 +1243,16 @@
         </svg>
         <span>Refresh data</span>
       </div>
+      <div class="float-project-menu-item" data-action="clear-screenshots">
+        <svg style="width: 12px; height: 12px; fill: #6B7280;" viewBox="0 0 24 24">
+          <rect x="3" y="5" width="18" height="2"/>
+          <rect x="5" y="8" width="14" height="13" fill="none" stroke="#6B7280" stroke-width="2"/>
+          <rect x="8" y="11" width="8" height="2"/>
+          <rect x="8" y="15" width="8" height="2"/>
+        </svg>
+        <span>Clear screenshots</span>
+        <span class="float-badge" id="clearScreenshotsBadge" style="margin-left: auto; display: none;"></span>
+      </div>
       <div class="float-project-menu-item float-project-menu-divider" data-action="disconnect">
         <svg style="width: 12px; height: 12px; fill: #DC2626;" viewBox="0 0 24 24">
           <polygon points="2 13 1 13 1 11 2 11 2 9 3 9 3 8 4 8 4 7 5 7 5 6 7 6 7 5 15 5 15 6 14 6 14 7 13 7 13 6 11 6 11 7 9 7 9 8 8 8 8 9 7 9 7 11 6 11 6 13 7 13 7 14 6 14 6 15 5 15 5 16 3 16 3 15 2 15 2 13"/>
@@ -1259,7 +1269,7 @@
       </div>
     `;
     
-    // Position menu below button
+    // Position menu below button (or above if docked at bottom)
     const button = moat.querySelector('.float-moat-project-dropdown');
     if (!button) {
       console.warn('Could not find project dropdown button');
@@ -1267,14 +1277,42 @@
     }
     
     const rect = button.getBoundingClientRect();
-    menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.right = `${window.innerWidth - rect.right}px`;
-    menu.style.minWidth = `${rect.width}px`;
     
-    document.body.appendChild(menu);
+    // When docked at bottom, position menu above the button
+    if (moatPosition === 'bottom') {
+      // Append menu off-screen first to measure its height
+      menu.style.position = 'fixed';
+      menu.style.top = '-9999px';
+      menu.style.right = '0';
+      document.body.appendChild(menu);
+      
+      // Get actual menu height
+      const menuHeight = menu.offsetHeight || 200; // Fallback estimate
+      
+      // Position above the button
+      menu.style.top = `${rect.top - menuHeight - 4}px`;
+      menu.style.right = `${window.innerWidth - rect.right}px`;
+      menu.style.minWidth = `${rect.width}px`;
+    } else {
+      // Position below for side-docked positions
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.right = `${window.innerWidth - rect.right}px`;
+      menu.style.minWidth = `${rect.width}px`;
+      document.body.appendChild(menu);
+    }
+    
+    // Update badge count for clear screenshots option
+    if (canUseNewTaskSystem() && window.taskStore) {
+      const completedTasks = window.taskStore.getTasks().filter(t => t.status === 'done' && t.screenshotPath);
+      const badge = menu.querySelector('#clearScreenshotsBadge');
+      if (badge && completedTasks.length > 0) {
+        badge.textContent = completedTasks.length;
+        badge.style.display = 'inline-block';
+      }
+    }
     
     // Handle menu clicks
-    menu.addEventListener('click', (e) => {
+    menu.addEventListener('click', async (e) => {
       const item = e.target.closest('.float-project-menu-item');
       if (item) {
         const action = item.dataset.action;
@@ -1284,6 +1322,8 @@
           exportAnnotations();
         } else if (action === 'refresh') {
           refreshTasks(false); // Manual refresh should show notifications
+        } else if (action === 'clear-screenshots') {
+          await clearCompletedScreenshots();
         }
       }
       menu.remove();
@@ -1517,6 +1557,108 @@
     
     showNotification('Project disconnected', 'info', 'disconnect');
     console.log('🔧 Moat: Project disconnect process completed');
+  }
+
+  // Clear screenshots from completed tasks
+  async function clearCompletedScreenshots() {
+    if (!canUseNewTaskSystem() || !window.taskStore) {
+      showNotification('Screenshots can only be cleared in new task system', 'error');
+      return;
+    }
+
+    try {
+      // Get stats before clearing
+      const stats = window.taskStore.getTaskStats();
+      const completedCount = stats['done'] || 0;
+
+      if (completedCount === 0) {
+        showNotification('No completed tasks found', 'info');
+        return;
+      }
+
+      // Count how many completed tasks have screenshots
+      const completedTasks = window.taskStore.getTasks().filter(t => t.status === 'done' && t.screenshotPath);
+      
+      if (completedTasks.length === 0) {
+        showNotification('No screenshots to clear', 'info');
+        return;
+      }
+
+      // Show confirmation dialog
+      const confirmed = await showClearScreenshotsConfirmation(completedTasks.length);
+      if (!confirmed) return;
+
+      // Show loading notification
+      showNotification('Clearing screenshots...', 'info');
+
+      // Delete screenshots
+      const result = await window.taskStore.deleteCompletedScreenshots();
+
+      if (result.success) {
+        // Regenerate markdown to reflect cleared screenshot paths
+        if (window.markdownGenerator) {
+          const allTasks = window.taskStore.getAllTasksChronological();
+          await window.markdownGenerator.rebuildMarkdownFile(allTasks);
+        }
+
+        // Show success message
+        const message = `Cleared ${result.deletedCount} screenshot${result.deletedCount !== 1 ? 's' : ''}`;
+        showNotification(message, 'success');
+        
+        console.log('✅ Screenshots cleared:', result);
+
+        // Refresh the sidebar to show updated tasks
+        await refreshTasks(true);
+      } else {
+        showNotification('Failed to clear screenshots', 'error');
+      }
+
+    } catch (error) {
+      console.error('Error clearing screenshots:', error);
+      showNotification(`Error: ${error.message}`, 'error');
+    }
+  }
+
+  // Show confirmation dialog for clearing screenshots
+  function showClearScreenshotsConfirmation(count) {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'float-modal-overlay';
+      modal.innerHTML = `
+        <div class="float-modal" style="max-width: 400px;">
+          <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: var(--moat-text-primary);">
+            Clear Screenshots?
+          </h2>
+          <p style="margin: 0 0 20px 0; font-size: 14px; color: var(--moat-text-secondary); line-height: 1.5;">
+            This will delete <strong>${count} screenshot${count !== 1 ? 's' : ''}</strong> from completed tasks. The task data will be preserved.
+            <br><br>
+            This action cannot be undone.
+          </p>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button class="float-modal-button float-modal-button-secondary" data-action="cancel">
+              Cancel
+            </button>
+            <button class="float-modal-button float-modal-button-danger" data-action="confirm">
+              Clear Screenshots
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      modal.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-action]');
+        if (button) {
+          const action = button.dataset.action;
+          modal.remove();
+          resolve(action === 'confirm');
+        } else if (e.target === modal) {
+          modal.remove();
+          resolve(false);
+        }
+      });
+    });
   }
 
   // Clear current session annotations (debugging helper)

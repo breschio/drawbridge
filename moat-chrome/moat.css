@@ -1855,6 +1855,18 @@ body.float-comment-mode * {
   flex-shrink: 0;
 }
 
+/* Badge for menu items */
+.float-badge {
+  background: var(--moat-primary);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
 /* More Menu */
 .float-more-menu {
   position: fixed;
@@ -2017,6 +2029,39 @@ body.float-comment-mode * {
   background: var(--moat-accent);
   opacity: 0.9;
   box-shadow: 0 1px 3px var(--moat-shadow);
+}
+
+/* Danger button for modals */
+.float-modal-button {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-family: inherit;
+}
+
+.float-modal-button-secondary {
+  background: var(--moat-bg-tertiary);
+  color: var(--moat-text-secondary);
+  border: 1px solid var(--moat-border-light);
+  border-radius: 6px;
+}
+
+.float-modal-button-secondary:hover {
+  background: var(--moat-border);
+  border-color: var(--moat-text-muted);
+}
+
+.float-modal-button-danger {
+  background: #DC2626;
+  color: white;
+  border-radius: 6px;
+}
+
+.float-modal-button-danger:hover {
+  background: #B91C1C;
 }
 
 /* Float Badge styles removed - badge feature disabled */
