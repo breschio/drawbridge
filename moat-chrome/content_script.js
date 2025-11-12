@@ -2892,21 +2892,73 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   }
 
   // Create comment input box
-  function createCommentBox(element, x, y) {
+  async function createCommentBox(element, x, y) {
     // If comment box already exists, shake it instead of creating new one
     if (commentBox) {
       shakeCommentBox();
       return;
     }
     
-    // Add visual confirmation pulse
-    element.classList.add('float-highlight-pulse');
-    setTimeout(() => {
-      element.classList.remove('float-highlight-pulse');
-    }, 500);
+    // Use the existing hover overlay for screenshot (already in DOM and positioned)
+    // No need to create a new one - just wait a moment to ensure it's rendered
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    // Capture screenshot with the highlight visible
+    let screenshotData = null;
+    if (window.html2canvas) {
+      try {
+        const rect = element.getBoundingClientRect();
+        const padding = 100;
+        const elementDocX = rect.x + window.scrollX;
+        const elementDocY = rect.y + window.scrollY;
+        
+        const captureX = Math.max(0, elementDocX - padding);
+        const captureY = Math.max(0, elementDocY - padding);
+        const captureWidth = rect.width + (padding * 2);
+        const captureHeight = rect.height + (padding * 2);
+        
+        console.log('📸 Capturing with overlay at:', {
+          overlayPos: { x: elementDocX, y: elementDocY, w: rect.width, h: rect.height },
+          captureArea: { x: captureX, y: captureY, w: captureWidth, h: captureHeight }
+        });
+        
+        // Capture what the user sees (with highlight overlay)
+        const canvas = await html2canvas(document.body, {
+          backgroundColor: null,
+          scale: Math.min(window.devicePixelRatio || 1, 2),
+          logging: false,
+          x: captureX,
+          y: captureY,
+          width: captureWidth,
+          height: captureHeight,
+          useCORS: true,
+          allowTaint: false
+        });
+        
+        screenshotData = {
+          dataUrl: canvas.toDataURL('image/png'),
+          viewport: {
+            x: captureX,
+            y: captureY,
+            width: captureWidth,
+            height: captureHeight,
+            padding: padding
+          }
+        };
+        console.log('✅ Screenshot captured with overlay');
+      } catch (e) {
+        console.warn('Screenshot capture failed:', e);
+      }
+    }
+    
+    // Keep the DOM overlay visible while user is commenting
+    // Don't remove it - just store reference
     
     commentBox = document.createElement('div');
     commentBox.className = 'float-comment-box';
+    commentBox.screenshotData = screenshotData; // Store for later use
+    commentBox.highlightedElement = element; // Store element reference
+    commentBox.highlightOverlay = hoverOverlay; // Store overlay reference for cleanup
     commentBox.innerHTML = `
       <textarea 
         class="float-comment-input" 
@@ -2984,6 +3036,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         console.warn('Moat: Selector validation failed, using fallback');
       }
       
+      // Calculate click position relative to element (for thumbnail centering)
+      const clickX = x - rect.x;
+      const clickY = y - rect.y;
+      
       // Create annotation object
       const annotation = {
         type: "user_message",
@@ -2999,6 +3055,12 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
           width: Math.round(rect.width),
           height: Math.round(rect.height)
         },
+        clickPosition: {
+          x: Math.round(clickX),
+          y: Math.round(clickY),
+          elementWidth: Math.round(rect.width),
+          elementHeight: Math.round(rect.height)
+        },
         pageUrl: window.location.href,
         timestamp: Date.now(),
         sessionId: sessionId,
@@ -3006,28 +3068,19 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         id: `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       };
       
-      // Try to capture screenshot with improved error handling
-      if (window.html2canvas) {
-        try {
-          console.log('📸 Moat: Capturing screenshot...');
-          const canvas = await html2canvas(element, {
-            backgroundColor: null,
-            scale: Math.min(window.devicePixelRatio || 1, 2),
-            logging: false,
-            width: rect.width,
-            height: rect.height,
-            useCORS: true,
-            allowTaint: false
-          });
-          annotation.screenshot = canvas.toDataURL('image/png');
-          console.log('✅ Moat: Screenshot captured successfully');
-        } catch (e) {
-          console.error('❌ Moat: Screenshot capture failed:', e);
-          showNotification('Screenshot capture failed - task saved without image', 'warning');
-        }
+      // Use pre-captured screenshot (captured when comment box was created)
+      if (commentBox.screenshotData) {
+        annotation.screenshot = commentBox.screenshotData.dataUrl;
+        annotation.screenshotViewport = commentBox.screenshotData.viewport;
+        console.log('✅ Moat: Using pre-captured screenshot with visible highlight');
       } else {
-        console.error('❌ Moat: html2canvas not available - no screenshot captured');
-        showNotification('Screenshot library not loaded - task saved without image', 'warning');
+        console.log('⚠️ Moat: No pre-captured screenshot available');
+      }
+      
+      // Remove DOM overlay after submission
+      if (commentBox.highlightOverlay) {
+        commentBox.highlightOverlay.remove();
+        hoverOverlay = null;
       }
       
       addToQueue(annotation);
@@ -3080,23 +3133,52 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   function exitCommentMode() {
     commentMode = false;
     document.body.classList.remove('float-comment-mode');
+    
+    // Remove DOM overlay from the element
+    if (commentBox && commentBox.highlightOverlay) {
+      commentBox.highlightOverlay.remove();
+      hoverOverlay = null;
+    }
+    
     removeCommentBox();
     removeHighlight();
   }
 
-  // Highlight element on hover
+  // Global hover overlay element
+  let hoverOverlay = null;
+
+  // Highlight element on hover with DOM overlay
   function highlightElement(element) {
     removeHighlight();
     highlightedElement = element;
-    element.classList.add('float-highlight');
+    
+    // Create overlay div for both hover and click
+    const rect = element.getBoundingClientRect();
+    hoverOverlay = document.createElement('div');
+    hoverOverlay.className = 'float-hover-overlay';
+    hoverOverlay.style.cssText = `
+      position: absolute;
+      left: ${rect.x + window.scrollX}px;
+      top: ${rect.y + window.scrollY}px;
+      width: ${rect.width}px;
+      height: ${rect.height}px;
+      border: 3px solid #3B82F6;
+      border-radius: 4px;
+      background-color: rgba(59, 130, 246, 0.1);
+      pointer-events: none;
+      z-index: 9998;
+      box-sizing: border-box;
+    `;
+    document.body.appendChild(hoverOverlay);
   }
 
   // Remove highlight
   function removeHighlight() {
-    if (highlightedElement) {
-      highlightedElement.classList.remove('float-highlight');
-      highlightedElement = null;
+    if (hoverOverlay) {
+      hoverOverlay.remove();
+      hoverOverlay = null;
     }
+    highlightedElement = null;
   }
 
   // Export annotations
