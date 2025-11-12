@@ -28,7 +28,7 @@ A Chrome extension for visually annotating React/Next.js applications during dev
    - Select the `moat-chrome` directory
 
 3. **Start Using**:
-   - Navigate to your React/Next.js app on `localhost`
+   - Navigate to your React/Next.js app (works on any URL)
    - Press `f` to enter comment mode
    - Click any element to annotate (including containers and backgrounds)
    - View annotations in the Moat sidebar
@@ -231,7 +231,7 @@ Annotations are exported in MCP-compatible JSON:
 
 ## 🐛 Troubleshooting
 
-- **Extension not working?** Make sure you're on a `localhost` URL
+- **Extension not working?** Drawbridge works on any URL (localhost, file://, custom domains, etc.)
 - **Wrong element selected?** The improved selector prioritizes unique attributes
 - **Can't see Moat?** Click the extension icon or press `Cmd/Ctrl + Shift + F`
 - **Element not found?** Check if the page structure changed after annotation

@@ -1,8 +1,109 @@
 ---
-description: Process pending Drawbridge UI annotation tasks from the browser
+description: Setup Drawbridge MCP and process UI annotation tasks
 ---
 
-# Drawbridge Task Processor
+# Drawbridge Command
+
+**Smart two-phase command:**
+1. **Setup Phase**: Check and configure MCP server if needed
+2. **Processing Phase**: Process tasks (with MCP or file-based fallback)
+
+---
+
+## PHASE 1: MCP Connection Check & Setup
+
+**FIRST, check MCP status in this order:**
+
+### Step 1: Check if MCP tools are available
+
+Try to determine if you have access to drawbridge MCP tools by checking your available tool list.
+
+### Step 2: If MCP NOT available, diagnose and offer to fix
+
+Check these in order:
+
+1. **Check if MCP server is built:**
+   ```bash
+   ls -la drawbridge-mcp-server/dist/index.js
+   ```
+   - If missing → Offer to build it: `cd drawbridge-mcp-server && npm run build`
+
+2. **Check if MCP config exists:**
+   ```bash
+   cat ~/.config/claude-code/mcp_config.json
+   ```
+   - If missing or no "drawbridge" entry → Offer to create it
+
+3. **If config exists but MCP not connected:**
+   - Explain that Claude Code restart is needed
+   - Provide restart instructions
+
+### Step 3: MCP Setup Helper
+
+**If user wants MCP setup, create config file:**
+
+```json
+{
+  "mcpServers": {
+    "drawbridge": {
+      "command": "node",
+      "args": ["<ABSOLUTE_PATH_TO_DRAWBRIDGE>/drawbridge-mcp-server/dist/index.js"],
+      "env": {
+        "DRAWBRIDGE_PROJECT_PATH": "<CURRENT_PROJECT_DIR>",
+        "DRAWBRIDGE_MODE": "manual"
+      }
+    }
+  }
+}
+```
+
+**IMPORTANT:**
+- Replace `<ABSOLUTE_PATH_TO_DRAWBRIDGE>` with full path to drawbridge repo
+- Replace `<CURRENT_PROJECT_DIR>` with actual project path (use `pwd`)
+- Use absolute paths only (not `~` or relative paths)
+- Tell user to restart Claude Code after config creation
+
+### Step 4: Show MCP Status
+
+Always show current status:
+
+```
+🔌 MCP Status:
+   Server Built: ✅ / ❌
+   Config Exists: ✅ / ❌
+   Connected: ✅ / ❌
+
+   Mode: [MCP Real-time] or [File-based fallback]
+```
+
+---
+
+## PHASE 2: Task Processing
+
+**Processing Mode Selection:**
+
+### If MCP Connected (Preferred):
+Use MCP tools for real-time task management:
+- `get_pending_tasks` - Get all pending tasks
+- `get_all_tasks` - Get all tasks regardless of status
+- `update_task_status` - Update task status (to do → doing → done)
+- `get_task_by_id` - Get specific task details
+- `set_processing_mode` - Change auto/manual mode
+
+**Benefits:**
+- Real-time file watching
+- Instant notifications of new tasks
+- Better performance
+- Atomic status updates
+
+### If MCP Not Connected (Fallback):
+Use file-based processing (instructions below).
+
+**Note:** File-based mode is fully functional but requires manual file reads/writes.
+
+---
+
+## File-Based Task Processing
 
 You are processing visual UI annotation tasks created via the Drawbridge Chrome extension.
 
@@ -29,15 +130,23 @@ Files to read:
 ```
 
 **FOR EACH TASK:**
-1. ✅ **BEFORE implementing**: Update JSON to `"status": "doing"`
+1. ✅ **BEFORE implementing**: Update status to `"doing"`
+   - **With MCP**: Use `update_task_status` tool
+   - **Without MCP**: Update JSON file manually
 2. ✅ **Implement** the code change
-3. ✅ **AFTER implementing**: Update JSON to `"status": "done"` + MD to `[x]`
+3. ✅ **AFTER implementing**: Update status to `"done"`
+   - **With MCP**: Use `update_task_status` tool
+   - **Without MCP**: Update JSON to `"status": "done"` + MD to `[x]`
 
 **⚠️ NEVER skip the "doing" status. ALWAYS update to "doing" before starting work.**
 
 ## Processing Instructions
 
-1. **Load Tasks**: Read `moat-tasks-detail.json` to get all task details including:
+1. **Load Tasks**:
+   - **With MCP**: Use `get_pending_tasks` or `get_all_tasks`
+   - **Without MCP**: Read `moat-tasks-detail.json` directly
+
+   Task details include:
    - `comment`: User's instruction
    - `selector`: CSS selector for target element
    - `screenshotPath`: Visual context (resolve `./screenshots/` to `.moat/screenshots/`)
@@ -82,7 +191,14 @@ Task: "Make this button green"
 Selector: button.submit-btn
 Screenshot: .moat/screenshots/moat-1234.png
 
-WORKFLOW:
+WORKFLOW WITH MCP:
+1. ⚠️ FIRST: update_task_status(task_id, "doing")
+2. Read screenshot for visual context
+3. Find button.submit-btn in codebase
+4. Implement change (use design token if available)
+5. ⚠️ AFTER: update_task_status(task_id, "done")
+
+WORKFLOW WITHOUT MCP:
 1. ⚠️ FIRST: Update .moat/moat-tasks-detail.json → "status": "doing"
 2. Read screenshot for visual context
 3. Find button.submit-btn in codebase
@@ -115,7 +231,7 @@ The `.moat/` directory doesn't exist in this project. This means:
 - You're in the wrong directory
 
 To fix:
-1. Open your browser with the project running (e.g., http://localhost:3000)
+1. Open your browser with the project running (works on any URL: localhost, file://, custom domains, etc.)
 2. Press Cmd+Shift+P (Mac) or Ctrl+Shift+P (Windows) in the browser
 3. Select your project directory
 4. Drawbridge will create .moat/ and deploy task files
