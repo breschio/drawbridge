@@ -6,6 +6,78 @@
   let moatPosition = 'bottom'; // 'right', 'bottom', or 'left' - default to bottom
   let currentTabFilter = 'to do'; // Currently selected tab filter
   
+  // ===== THUMBNAIL CACHE =====
+  const thumbnailCache = new Map(); // Cache for loaded thumbnail URLs
+  const thumbnailPromises = new Map(); // Track in-progress loads to avoid duplicates
+  
+  // Load thumbnail from screenshot path
+  async function loadThumbnailFromPath(screenshotPath) {
+    if (!screenshotPath || !window.directoryHandle) {
+      return null;
+    }
+    
+    // Check cache first
+    if (thumbnailCache.has(screenshotPath)) {
+      return thumbnailCache.get(screenshotPath);
+    }
+    
+    // Check if already loading
+    if (thumbnailPromises.has(screenshotPath)) {
+      return thumbnailPromises.get(screenshotPath);
+    }
+    
+    // Start loading
+    const loadPromise = (async () => {
+      try {
+        // Parse screenshot path (format: "./screenshots/filename.png")
+        const pathParts = screenshotPath.replace('./', '').split('/');
+        
+        // Get screenshots directory
+        const screenshotsDir = await window.directoryHandle.getDirectoryHandle('screenshots', { create: false });
+        const fileName = pathParts[pathParts.length - 1];
+        
+        // Read file
+        const fileHandle = await screenshotsDir.getFileHandle(fileName);
+        const file = await fileHandle.getFile();
+        const blob = await file;
+        
+        // Create object URL
+        const objectUrl = URL.createObjectURL(blob);
+        
+        // Cache it
+        thumbnailCache.set(screenshotPath, objectUrl);
+        thumbnailPromises.delete(screenshotPath);
+        
+        return objectUrl;
+      } catch (error) {
+        console.warn('Failed to load thumbnail:', screenshotPath, error);
+        thumbnailPromises.delete(screenshotPath);
+        return null;
+      }
+    })();
+    
+    thumbnailPromises.set(screenshotPath, loadPromise);
+    return loadPromise;
+  }
+  
+  // Revoke thumbnail object URLs to free memory
+  function revokeThumbnailUrl(screenshotPath) {
+    const url = thumbnailCache.get(screenshotPath);
+    if (url) {
+      URL.revokeObjectURL(url);
+      thumbnailCache.delete(screenshotPath);
+    }
+  }
+  
+  // Clear all cached thumbnails
+  function clearThumbnailCache() {
+    for (const url of thumbnailCache.values()) {
+      URL.revokeObjectURL(url);
+    }
+    thumbnailCache.clear();
+    thumbnailPromises.clear();
+  }
+  
   // ===== NOTIFICATION DEDUPLICATION SYSTEM =====
   class NotificationDeduplicator {
     constructor() {
@@ -2715,6 +2787,9 @@
       moat.classList.remove('float-moat-visible');
       isVisible = false;
       
+      // Remove any active element highlight
+      removeElementHighlight();
+      
       // PERSIST VISIBILITY STATE
       localStorage.setItem('moat.visible', 'false');
       console.log('Moat: Visibility state saved to localStorage');
@@ -2790,29 +2865,58 @@
     const statusClass = `float-status-${task.status.replace(/\s+/g, '-')}`;
     const statusText = getStatusText(task.status);
     const timeAgo = formatTimeAgo(task.timestamp || task.createdAt);
+    const hasScreenshot = task.screenshotPath && window.directoryHandle;
+    
+    // Calculate thumbnail focus point based on click position in context viewport
+    let thumbnailStyle = '';
+    if (hasScreenshot && task.clickPosition && task.screenshotViewport) {
+      // Calculate click position relative to the captured viewport
+      const clickAbsoluteX = task.boundingRect.x + task.clickPosition.x;
+      const clickAbsoluteY = task.boundingRect.y + task.clickPosition.y;
+      
+      const clickInViewportX = clickAbsoluteX - task.screenshotViewport.x;
+      const clickInViewportY = clickAbsoluteY - task.screenshotViewport.y;
+      
+      const xPercent = (clickInViewportX / task.screenshotViewport.width) * 100;
+      const yPercent = (clickInViewportY / task.screenshotViewport.height) * 100;
+      
+      thumbnailStyle = `style="object-position: ${xPercent}% ${yPercent}%;"`;
+    }
     
     return `
       <div class="float-moat-item ${statusClass} ${isCompleted ? 'float-moat-completed' : ''}" 
            data-id="${task.id}"
-           data-type="${task.format || 'current'}">
-        <div class="float-moat-item-header">
-          <div class="float-moat-status-and-time">
-            <span class="float-moat-status-text">${statusText}</span>
-            <span class="float-moat-time">${timeAgo}</span>
+           data-type="${task.format || 'current'}"
+           data-screenshot-path="${task.screenshotPath || ''}">
+        <div class="float-moat-item-layout">
+          <div class="float-moat-item-content-area">
+            <div class="float-moat-item-header">
+              <div class="float-moat-status-and-time">
+                <span class="float-moat-time">${timeAgo}</span>
+              </div>
+              ${!hasScreenshot && (task.format === 'current' || !task.format) ? 
+                `<button class="float-moat-remove" data-id="${task.id}" title="Remove task">
+                  <svg class="float-icon" viewBox="0 0 24 24">
+                    <polygon points="15 13 16 13 16 14 17 14 17 15 18 15 18 16 19 16 19 17 20 17 20 18 21 18 21 19 22 19 22 20 21 20 21 21 20 21 20 22 19 22 19 21 18 21 18 20 17 20 17 19 16 19 16 18 15 18 15 17 14 17 14 16 13 16 13 15 11 15 11 16 10 16 10 17 9 17 9 18 8 18 8 19 7 19 7 20 6 20 6 21 5 21 5 22 4 22 4 21 3 21 3 20 2 20 2 19 3 19 3 18 4 18 4 17 5 17 5 16 6 16 6 15 7 15 7 14 8 14 8 13 9 13 9 11 8 11 8 10 7 10 7 9 6 9 6 8 5 8 5 7 4 7 4 6 3 6 3 5 2 5 2 4 3 4 3 3 4 3 4 2 5 2 5 3 6 3 6 4 7 4 7 5 8 5 8 6 9 6 9 7 10 7 10 8 11 8 11 9 13 9 13 8 14 8 14 7 15 7 15 6 16 6 16 5 17 5 17 4 18 4 18 3 19 3 19 2 20 2 20 3 21 3 21 4 22 4 22 5 21 5 21 6 20 6 20 7 19 7 19 8 18 8 18 9 17 9 17 10 16 10 16 11 15 11 15 13"/>
+                  </svg>
+                </button>` : 
+                ''
+              }
+            </div>
+            <div class="float-moat-content">${task.content || task.comment || 'No content available'}</div>
+            ${task.selector ? `<span class="float-moat-selector">${task.selector}</span>` : ''}
           </div>
-          ${(task.format === 'current' || !task.format) ? 
-            `<button class="float-moat-remove" data-id="${task.id}" title="Remove task">
-              <svg class="float-icon" viewBox="0 0 24 24">
-                <polygon points="15 13 16 13 16 14 17 14 17 15 18 15 18 16 19 16 19 17 20 17 20 18 21 18 21 19 22 19 22 20 21 20 21 21 20 21 20 22 19 22 19 21 18 21 18 20 17 20 17 19 16 19 16 18 15 18 15 17 14 17 14 16 13 16 13 15 11 15 11 16 10 16 10 17 9 17 9 18 8 18 8 19 7 19 7 20 6 20 6 21 5 21 5 22 4 22 4 21 3 21 3 20 2 20 2 19 3 19 3 18 4 18 4 17 5 17 5 16 6 16 6 15 7 15 7 14 8 14 8 13 9 13 9 11 8 11 8 10 7 10 7 9 6 9 6 8 5 8 5 7 4 7 4 6 3 6 3 5 2 5 2 4 3 4 3 3 4 3 4 2 5 2 5 3 6 3 6 4 7 4 7 5 8 5 8 6 9 6 9 7 10 7 10 8 11 8 11 9 13 9 13 8 14 8 14 7 15 7 15 6 16 6 16 5 17 5 17 4 18 4 18 3 19 3 19 2 20 2 20 3 21 3 21 4 22 4 22 5 21 5 21 6 20 6 20 7 19 7 19 8 18 8 18 9 17 9 17 10 16 10 16 11 15 11 15 13"/>
-              </svg>
-            </button>` : 
+          ${hasScreenshot ? 
+            `<div class="float-moat-thumbnail-container" data-task-id="${task.id}">
+              <img class="float-moat-thumbnail" ${thumbnailStyle} src="" alt="Task thumbnail" />
+              <button class="float-moat-thumbnail-overlay" data-task-id="${task.id}" title="Remove task">
+                <svg class="float-moat-thumbnail-close" viewBox="0 0 24 24">
+                  <polygon points="15 13 16 13 16 14 17 14 17 15 18 15 18 16 19 16 19 17 20 17 20 18 21 18 21 19 22 19 22 20 21 20 21 21 20 21 20 22 19 22 19 21 18 21 18 20 17 20 17 19 16 19 16 18 15 18 15 17 14 17 14 16 13 16 13 15 11 15 11 16 10 16 10 17 9 17 9 18 8 18 8 19 7 19 7 20 6 20 6 21 5 21 5 22 4 22 4 21 3 21 3 20 2 20 2 19 3 19 3 18 4 18 4 17 5 17 5 16 6 16 6 15 7 15 7 14 8 14 8 13 9 13 9 11 8 11 8 10 7 10 7 9 6 9 6 8 5 8 5 7 4 7 4 6 3 6 3 5 2 5 2 4 3 4 3 3 4 3 4 2 5 2 5 3 6 3 6 4 7 4 7 5 8 5 8 6 9 6 9 7 10 7 10 8 11 8 11 9 13 9 13 8 14 8 14 7 15 7 15 6 16 6 16 5 17 5 17 4 18 4 18 3 19 3 19 2 20 2 20 3 21 3 21 4 22 4 22 5 21 5 21 6 20 6 20 7 19 7 19 8 18 8 18 9 17 9 17 10 16 10 16 11 15 11 15 13"/>
+                </svg>
+              </button>
+            </div>` : 
             ''
           }
-        </div>
-        <div class="float-moat-content">${task.content || task.comment || 'No content available'}</div>
-        <div class="float-moat-meta">
-          <span class="float-moat-target" title="${task.title}">${task.title}</span>
-          ${task.selector ? `<span class="float-moat-selector">${task.selector}</span>` : ''}
         </div>
       </div>
     `;
@@ -2857,22 +2961,154 @@
 
   
   // Add event listeners for all tasks view
+  // Global hover overlay for element highlighting
+  let taskHoverOverlay = null;
+
+  // Show element highlight on task card hover
+  function showElementHighlightOnHover(annotation) {
+    try {
+      const element = document.querySelector(annotation.target);
+      if (!element) {
+        console.warn('Moat: Element not found for hover highlight:', annotation.target);
+        return;
+      }
+      
+      // Remove any existing overlay
+      removeElementHighlight();
+      
+      // Create DOM overlay
+      const rect = element.getBoundingClientRect();
+      taskHoverOverlay = document.createElement('div');
+      taskHoverOverlay.className = 'float-task-hover-overlay';
+      taskHoverOverlay.style.cssText = `
+        position: absolute;
+        left: ${rect.x + window.scrollX}px;
+        top: ${rect.y + window.scrollY}px;
+        width: ${rect.width}px;
+        height: ${rect.height}px;
+        border: 3px solid #3B82F6;
+        border-radius: 4px;
+        background-color: rgba(59, 130, 246, 0.1);
+        pointer-events: none;
+        z-index: 9998;
+        box-sizing: border-box;
+        transition: opacity 0.15s ease;
+      `;
+      document.body.appendChild(taskHoverOverlay);
+      
+      // Optional: Scroll element into view if it's off-screen
+      const isInViewport = (
+        rect.top >= 0 &&
+        rect.left >= 0 &&
+        rect.bottom <= window.innerHeight &&
+        rect.right <= window.innerWidth
+      );
+      
+      if (!isInViewport) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } catch (e) {
+      console.warn('Moat: Could not show hover highlight', e);
+    }
+  }
+
+  // Remove element highlight
+  function removeElementHighlight() {
+    if (taskHoverOverlay) {
+      taskHoverOverlay.remove();
+      taskHoverOverlay = null;
+    }
+  }
+
   function addAllTasksListeners() {
     if (!moat) return;
     
     const queueContainer = moat.querySelector('.float-moat-queue');
     
+    // Clean up overlay when scrolling the sidebar
+    queueContainer.addEventListener('scroll', () => {
+      removeElementHighlight();
+    }, { passive: true });
+    
+    // Load thumbnails for all tasks
+    queueContainer.querySelectorAll('.float-moat-item').forEach(async item => {
+      const screenshotPath = item.dataset.screenshotPath;
+      if (screenshotPath) {
+        const thumbnailUrl = await loadThumbnailFromPath(screenshotPath);
+        if (thumbnailUrl) {
+          const thumbnailImg = item.querySelector('.float-moat-thumbnail');
+          if (thumbnailImg) {
+            thumbnailImg.src = thumbnailUrl;
+          }
+        }
+      }
+    });
+    
     // Add event listeners
     queueContainer.querySelectorAll('.float-moat-item').forEach(item => {
+      // Hover to preview element highlight (only for current session items)
+      item.addEventListener('mouseenter', (e) => {
+        const dataType = item.dataset.type;
+        
+        if (dataType === 'current') {
+          const id = item.dataset.id;
+          
+          // Try to get annotation from new task system first, then fall back to legacy
+          let annotation = null;
+          
+          if (canUseNewTaskSystem() && window.taskStore) {
+            // Get from new task system
+            const task = window.taskStore.getTaskById(id);
+            if (task) {
+              // Convert task format to annotation format for compatibility
+              annotation = {
+                target: task.selector,
+                ...task
+              };
+            }
+          } else {
+            // Fallback to legacy localStorage queue
+            const queue = JSON.parse(localStorage.getItem('moat.queue') || '[]');
+            annotation = queue.find(a => a.id === id);
+          }
+          
+          if (annotation && annotation.target) {
+            showElementHighlightOnHover(annotation);
+          }
+        }
+      });
+      
+      // Remove highlight on mouse leave
+      item.addEventListener('mouseleave', () => {
+        removeElementHighlight();
+      });
+      
       // Click to highlight element (only for current session items)
       item.addEventListener('click', (e) => {
+        // Don't trigger if clicking remove button or thumbnail
         if (e.target.closest('.float-moat-remove')) return;
+        if (e.target.closest('.float-moat-thumbnail-container')) return;
         
         const dataType = item.dataset.type;
         if (dataType === 'current') {
           const id = item.dataset.id;
-          const queue = JSON.parse(localStorage.getItem('moat.queue') || '[]');
-          const annotation = queue.find(a => a.id === id);
+          
+          // Try to get annotation from new task system first, then fall back to legacy
+          let annotation = null;
+          
+          if (canUseNewTaskSystem() && window.taskStore) {
+            const task = window.taskStore.getTaskById(id);
+            if (task) {
+              annotation = {
+                target: task.selector,
+                ...task
+              };
+            }
+          } else {
+            const queue = JSON.parse(localStorage.getItem('moat.queue') || '[]');
+            annotation = queue.find(a => a.id === id);
+          }
+          
           if (annotation) {
             highlightAnnotatedElement(annotation);
           }
@@ -2891,6 +3127,16 @@
         await removeAnnotation(btn.dataset.id);
       });
     });
+    
+    // Thumbnail close button handlers
+    queueContainer.querySelectorAll('.float-moat-thumbnail-overlay').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const taskId = btn.dataset.taskId;
+        console.log('🗑️ Moat: Thumbnail close clicked for task ID:', taskId);
+        await removeAnnotation(taskId);
+      });
+    });
   }
 
   // Highlight annotated element
@@ -2898,24 +3144,18 @@
     try {
       const element = document.querySelector(annotation.target);
       if (element) {
-        // Remove any existing highlights
-        document.querySelectorAll('.float-highlight-pulse').forEach(el => {
-          el.classList.remove('float-highlight-pulse');
-        });
-        
-        // Add pulse effect
-        element.classList.add('float-highlight-pulse');
+        // Show the same DOM overlay we use for hover
+        showElementHighlightOnHover(annotation);
         
         // Scroll into view
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         
-        // Remove highlight after animation
+        // Remove highlight after 2 seconds
         setTimeout(() => {
-          element.classList.remove('float-highlight-pulse');
+          removeElementHighlight();
         }, 2000);
       } else {
         console.warn('Moat: Could not find element with selector:', annotation.target);
-        // Show a tooltip or notification that element wasn't found
         showNotification('Element not found on page');
       }
     } catch (e) {
