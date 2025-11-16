@@ -3238,8 +3238,21 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
 
   // Listen for keyboard events
   document.addEventListener('keydown', (e) => {
-    // Enter comment mode with 'C' key (updated from 'f')
+    // Exit comment mode with Escape (works on all tabs, even if not visible)
+    if (e.key === 'Escape' && commentMode) {
+      e.preventDefault();
+      exitCommentMode();
+      return;
+    }
+    
+    // 'C' key should ONLY work when sidebar is visible on the active tab
     if ((e.key === 'C' || e.key === 'c') && !commentMode && !e.target.matches('input, textarea')) {
+      // Check if tab is visible AND sidebar is open
+      const sidebarVisible = window.Moat && window.Moat.isSidebarVisible ? window.Moat.isSidebarVisible() : false;
+      if (document.hidden || !sidebarVisible) {
+        return; // Ignore the keystroke
+      }
+      
       e.preventDefault();
       
       // Dispatch event to remove persistent notification
@@ -3253,12 +3266,6 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       }
       
       enterCommentMode();
-    }
-    
-    // Exit comment mode with Escape
-    if (e.key === 'Escape' && commentMode) {
-      e.preventDefault();
-      exitCommentMode();
     }
     
     // Toggle sidebar with Cmd+Shift+F
