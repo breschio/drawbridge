@@ -14,7 +14,7 @@ Make comments in the browser (like in Figma) and send them to Claude Code and Cu
 
 4.  Pin it for easy access
 
-![db-open-extension](https://github.com/user-attachments/assets/1732a588-5985-45b5-85b6-9a73c21d2b4b)
+![db-open-extension](demo/images/db-open-extension.png)
 
 
 💬 2. Connect your project
@@ -44,7 +44,7 @@ Make comments in the browser (like in Figma) and send them to Claude Code and Cu
 
 5. Tasks will also be synced to Cursor
 
-![db-comments-1](https://github.com/user-attachments/assets/d6a8b63a-21e5-46cc-801d-d7b4f40ff769)
+![db-comments-1](https://github.com/breschio/drawbridge-media/blob/main/drawbridge-comment-2.gif?raw=true)
 
 
 
@@ -73,7 +73,7 @@ Drawbridge works with **Cursor** and **Claude Code**:
 
 5. IF you run into trouble with "bridge" simply be more explicit by saying "use @drawbridge-workflow.mdc to process @moat-tasks.mdc"
 
-![db-process-tasks](https://github.com/user-attachments/assets/da71b412-eee4-4cec-abe5-3b9719e297b2)
+![db-process-tasks](demo/images/db-process-tasks.png)
 
 ### In Claude Code
 
@@ -109,7 +109,7 @@ Drawbridge works with **Cursor** and **Claude Code**:
 
 2.  Continue making edits to refine your work!
 
-![db-tasks-complete](https://github.com/user-attachments/assets/799c0ad6-da98-4506-8f12-ad338aa1aba3)
+![db-tasks-complete](demo/images/db-tasks-complete.png)
 
 
 
