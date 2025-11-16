@@ -3485,6 +3485,11 @@
     return true;
   }
 
+  // Export to global scope for content script access
+  window.Moat = {
+    isSidebarVisible: () => isVisible,
+  };
+
   // Export to global scope for debugging and manual sync
   window.MoatDebug = {
     exportAnnotations,
