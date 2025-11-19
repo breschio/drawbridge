@@ -304,8 +304,8 @@ class TaskStore {
             
             // Write to file using File System Access API
             const fileHandle = await this.directoryHandle.getFileHandle('moat-tasks-detail.json', { create: true });
-            const writable = await fileHandle.createWritable();
-            
+            const writable = await fileHandle.createWritable({ keepExistingData: false });
+
             // Atomic write: write all data then close
             await writable.write(jsonData);
             await writable.close();
@@ -486,7 +486,7 @@ class TaskStore {
             const backupName = `moat-tasks-detail.backup.${timestamp}.json`;
             
             const fileHandle = await this.directoryHandle.getFileHandle(backupName, { create: true });
-            const writable = await fileHandle.createWritable();
+            const writable = await fileHandle.createWritable({ keepExistingData: false });
             const jsonData = JSON.stringify(this.tasks, null, 2);
             await writable.write(jsonData);
             await writable.close();
