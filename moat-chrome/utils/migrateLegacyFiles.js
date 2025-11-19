@@ -334,7 +334,7 @@ class LegacyFileMigrator {
             
             // Create backup file
             const backupHandle = await moatDir.getFileHandle(backupName, { create: true });
-            const writable = await backupHandle.createWritable();
+            const writable = await backupHandle.createWritable({ keepExistingData: false });
             await writable.write(content);
             await writable.close();
             
@@ -379,7 +379,7 @@ class LegacyFileMigrator {
           
           // Restore original file
           const originalHandle = await moatDir.getFileHandle(backup.original, { create: true });
-          const writable = await originalHandle.createWritable();
+          const writable = await originalHandle.createWritable({ keepExistingData: false });
           await writable.write(content);
           await writable.close();
           
@@ -597,8 +597,8 @@ class LegacyFileMigrator {
         // Copy original content to backup
         const originalFile = await file.handle.getFile();
         const content = await originalFile.text();
-        
-        const writable = await backupHandle.createWritable();
+
+        const writable = await backupHandle.createWritable({ keepExistingData: false });
         await writable.write(content);
         await writable.close();
         
@@ -625,14 +625,14 @@ class LegacyFileMigrator {
     try {
       // Write moat-tasks-detail.json
       const detailHandle = await this.directoryHandle.getFileHandle('moat-tasks-detail.json', { create: true });
-      const detailWritable = await detailHandle.createWritable();
+      const detailWritable = await detailHandle.createWritable({ keepExistingData: false });
       await detailWritable.write(JSON.stringify(tasks, null, 2));
       await detailWritable.close();
-      
+
       // Generate and write moat-tasks.md
       const markdownContent = this.generateMarkdownFromTasks(tasks);
       const markdownHandle = await this.directoryHandle.getFileHandle('moat-tasks.md', { create: true });
-      const markdownWritable = await markdownHandle.createWritable();
+      const markdownWritable = await markdownHandle.createWritable({ keepExistingData: false });
       await markdownWritable.write(markdownContent);
       await markdownWritable.close();
       

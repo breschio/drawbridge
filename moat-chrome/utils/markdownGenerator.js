@@ -153,8 +153,8 @@ async function writeMarkdownToFile(markdownContent) {
     try {
         if (typeof window !== 'undefined' && window.directoryHandle) {
             const fileHandle = await window.directoryHandle.getFileHandle('moat-tasks.md', { create: true });
-            const writable = await fileHandle.createWritable();
-            
+            const writable = await fileHandle.createWritable({ keepExistingData: false });
+
             // Atomic write
             await writable.write(markdownContent);
             await writable.close();
