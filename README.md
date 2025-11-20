@@ -8,7 +8,7 @@ Make comments in the browser (like in Figma) and send them to Claude Code and Cu
 
 1.  Download or clone the Drawbridge to your desktop or location of choice
 
-2.  Go to chrome extensions, switch to dev mode, and unpack the extension drawbridge/moat-chrome
+2.  Go to chrome extensions, switch to dev mode, and unpack the extension drawbridge/chrome-extension
 
 3.  Activate the plugin
 
