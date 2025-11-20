@@ -68,3 +68,10 @@ coverage/
 # Drawbridge project-specific files
 .moat/
 .claude/
+
+# Media files and demo assets (hosted externally)
+_media/
+demo/images/
+
+# Standalone UI style guide
+drawbridge-ui/
