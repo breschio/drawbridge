@@ -8,7 +8,7 @@
 
 ### **1. Chrome Extension Layer**
 ```
-Chrome Extension (moat-chrome/)
+Chrome Extension (chrome-extension/)
 ├── manifest.json          # Extension configuration
 ├── content_script.js      # Main logic (injected into every localhost page)
 ├── popup.js              # Extension popup interface

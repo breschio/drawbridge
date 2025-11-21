@@ -25,7 +25,7 @@ A Chrome extension for visually annotating React/Next.js applications during dev
    - Open Chrome and go to `chrome://extensions`
    - Enable "Developer mode" (top right)
    - Click "Load unpacked"
-   - Select the `moat-chrome` directory
+   - Select the `chrome-extension` directory
 
 3. **Start Using**:
    - Navigate to your React/Next.js app (works on any URL)
