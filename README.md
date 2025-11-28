@@ -1,4 +1,4 @@
-Drawbridge - Visual comments for Claude Code and Cursor
+Drawbridge - Visual annotations for Claude Code and Cursor
 ==========================================
 
 Make comments in the browser (like in Figma) and send them to Claude Code and Cursor.  This chrome plugin + cursor ruleset connects your browser to your local development project. Comments made on the front end are batched into a markdown file. Run the command "bridge" to process them in Cursor. Simplify your workflow by adding more context to visual edits with Cursor.
