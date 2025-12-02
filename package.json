@@ -1,9 +1,10 @@
 {
   "name": "moat",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Moat - Visual UI feedback with markdown task logging",
   "main": "moat-watcher.js",
   "scripts": {
+    "build": "node scripts/build.js",
     "watch": "node moat-watcher.js",
     "demo": "cd demo && python3 -m http.server 8080",
     "test": "jest",

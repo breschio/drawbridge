@@ -25,6 +25,8 @@ Thumbs.db
 **/moat-tasks.md
 
 # Chrome extension build artifacts
+build/
+dist/
 *.crx
 *.pem
 *.zip

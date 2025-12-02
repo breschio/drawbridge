@@ -301,15 +301,17 @@ class TaskStore {
 
             // Prepare JSON data with proper formatting
             const jsonData = JSON.stringify(this.tasks, null, 2);
-            
+
             // Write to file using File System Access API
             const fileHandle = await this.directoryHandle.getFileHandle('moat-tasks-detail.json', { create: true });
+
+            // Use keepExistingData: false to truncate and overwrite
             const writable = await fileHandle.createWritable({ keepExistingData: false });
 
-            // Atomic write: write all data then close
+            // Write new content (file is truncated first)
             await writable.write(jsonData);
             await writable.close();
-            
+
             console.log(`Successfully saved ${this.tasks.length} tasks to file`);
             return true;
         } catch (error) {

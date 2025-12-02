@@ -153,12 +153,14 @@ async function writeMarkdownToFile(markdownContent) {
     try {
         if (typeof window !== 'undefined' && window.directoryHandle) {
             const fileHandle = await window.directoryHandle.getFileHandle('moat-tasks.md', { create: true });
+
+            // Use keepExistingData: false to truncate and overwrite
             const writable = await fileHandle.createWritable({ keepExistingData: false });
 
-            // Atomic write
+            // Write new content (file is truncated first)
             await writable.write(markdownContent);
             await writable.close();
-            
+
             console.log('Successfully wrote markdown to moat-tasks.md');
             return true;
         } else {
