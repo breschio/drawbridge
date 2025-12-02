@@ -192,3 +192,15 @@ You can control how Drawbridge processes tasks by specifying a mode.
 -   **Connection Issues**: If Drawbridge can't find tasks, press `Cmd/Ctrl+Shift+P` in your browser and re-select your project directory to reconnect.
 
 **Happy building with Drawbridge!** 🎯
+
+📄 License
+----------
+
+This project is licensed under a custom license. See the [LICENSE](LICENSE) file for details.
+
+**Key points:**
+- ✅ Free to use, copy, and modify for any lawful purpose
+- ❌ No redistribution, sublicensing, or selling
+- ❌ Cannot be offered as a commercial service
+
+For commercial licensing inquiries: breschicreative@gmail.com
