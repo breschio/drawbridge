@@ -2171,10 +2171,24 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       return;
     }
     
-    // Fallback to simple notification if moat.js not loaded yet
+    // Fallback to simple notification with inline styles (for CSS isolation)
     const notification = document.createElement('div');
-    notification.className = `float-notification ${type === 'error' ? 'float-error' : ''}`;
     notification.textContent = message;
+    notification.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: ${type === 'error' ? '#dc2626' : '#1f2937'};
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 2147483647;
+      max-width: 300px;
+      pointer-events: auto;
+    `;
     document.body.appendChild(notification);
     
     setTimeout(() => notification.remove(), 3000);
@@ -2971,7 +2985,9 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       </div>
     `;
     
-    document.body.appendChild(commentBox);
+    // Append to shadow root for CSS isolation (if available), otherwise fallback to body
+    const container = window.moatShadowRoot || document.body;
+    container.appendChild(commentBox);
     
     // Position near cursor (using actual click coordinates)
     const boxWidth = 320;
@@ -3209,9 +3225,22 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     if (!commentMode || commentBox) return; // Don't highlight if comment box is open
     
     const element = document.elementFromPoint(e.clientX, e.clientY);
-    if (element && element !== hoveredElement && 
-        !element.closest('.float-comment-box') && 
-        !element.closest('.float-moat')) {
+    
+    // Skip if element is the shadow host (moat UI container)
+    if (element && element.id === 'moat-shadow-host') {
+      return;
+    }
+    
+    // Use composedPath() to properly detect if hovering over Shadow DOM elements
+    const path = e.composedPath();
+    const hoveringOverMoatUI = path.some(el => 
+      el.classList && (
+        el.classList.contains('float-moat') || 
+        el.classList.contains('float-comment-box')
+      )
+    );
+    
+    if (element && element !== hoveredElement && !hoveringOverMoatUI) {
       hoveredElement = element;
       highlightElement(element);
     }
@@ -3221,8 +3250,24 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   document.addEventListener('click', (e) => {
     if (!commentMode) return;
     
+    // Use composedPath() to properly detect clicks inside Shadow DOM
+    // This is necessary because e.target gets retargeted to the shadow host
+    // when events bubble out of Shadow DOM, breaking .closest() checks
+    const path = e.composedPath();
+    const clickedInsideMoatUI = path.some(el => 
+      el.classList && (
+        el.classList.contains('float-moat') || 
+        el.classList.contains('float-comment-box')
+      )
+    );
+    
+    if (clickedInsideMoatUI) {
+      return;
+    }
+    
+    // Also check for shadow host directly (fallback safety check)
     const element = e.target;
-    if (element.closest('.float-comment-box') || element.closest('.float-moat')) {
+    if (element.id === 'moat-shadow-host') {
       return;
     }
     
