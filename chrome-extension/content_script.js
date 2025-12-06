@@ -7,6 +7,35 @@
   let projectRoot = null;
   let markdownFileHandle = null; // Handle for moat-tasks.md
 
+  // Drawing mode state (for free-form rectangle tool)
+  let drawingMode = false;
+  let drawingTool = null; // Current active tool ('rectangle', 'arrow', etc.)
+  let drawingCanvas = null; // Canvas overlay element
+  let drawingCtx = null; // Canvas 2D context
+  let isDrawing = false; // Whether currently drawing
+  let drawStartX = 0;
+  let drawStartY = 0;
+  let currentRect = null; // Current rectangle being drawn {x, y, width, height}
+
+  // Drawing tools registry (extensible for future tools)
+  const drawingTools = {
+    rectangle: {
+      name: 'rectangle',
+      cursor: 'crosshair',
+      draw: function(ctx, x, y, width, height) {
+        ctx.strokeStyle = '#3B82F6';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.strokeRect(x, y, width, height);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+        ctx.fillRect(x, y, width, height);
+      }
+    }
+    // Future tools can be added here:
+    // arrow: { ... },
+    // connector: { ... }
+  };
+
   // Generate unique session ID
   const sessionId = `moat-session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -220,23 +249,49 @@
   // Convert annotation format to TaskStore format (Task 2.1)
   function convertAnnotationToTask(annotation, screenshotPath = '') {
     // Generate a clean title from element label and comment
-    const title = annotation.elementLabel || 'UI Element Task';
+    // For freeform rectangles, use a default title
+    const title = annotation.elementLabel || (annotation.selectorMethod === 'freeform' ? 'Freeform Rectangle Task' : 'UI Element Task');
     
-    // Convert bounding rect format
-    const boundingRect = {
-      x: annotation.boundingRect.x,
-      y: annotation.boundingRect.y,
-      w: annotation.boundingRect.width,
-      h: annotation.boundingRect.height
-    };
+    // Handle bounding rect - support both formats
+    let boundingRect;
+    if (annotation.boundingBox && annotation.boundingBox.type === 'freeform') {
+      // Freeform rectangle - use xywh format
+      boundingRect = {
+        x: annotation.boundingBox.xywh.x,
+        y: annotation.boundingBox.xywh.y,
+        w: annotation.boundingBox.xywh.width,
+        h: annotation.boundingBox.xywh.height
+      };
+    } else if (annotation.boundingRect) {
+      // Standard element bounding rect
+      boundingRect = {
+        x: annotation.boundingRect.x,
+        y: annotation.boundingRect.y,
+        w: annotation.boundingRect.width || annotation.boundingRect.w,
+        h: annotation.boundingRect.height || annotation.boundingRect.h
+      };
+    } else {
+      // Fallback
+      boundingRect = { x: 0, y: 0, w: 0, h: 0 };
+    }
 
-    return {
+    // For freeform rectangles, selector can be null or a special value
+    const selector = annotation.target || (annotation.selectorMethod === 'freeform' ? 'freeform' : null);
+
+    const taskData = {
       title: title,
       comment: annotation.content,
-      selector: annotation.target,
+      selector: selector,
       boundingRect: boundingRect,
       screenshotPath: screenshotPath || ''
     };
+
+    // Add bounding box data for freeform rectangles (preserve all formats)
+    if (annotation.boundingBox && annotation.boundingBox.type === 'freeform') {
+      taskData.boundingBox = annotation.boundingBox;
+    }
+
+    return taskData;
   }
 
   // Check if utilities are available and project is connected (Task 2.1)
@@ -3160,6 +3215,335 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     removeHighlight();
   }
 
+  // Create canvas overlay for drawing
+  function createDrawingCanvas() {
+    if (drawingCanvas) return; // Already exists
+    
+    drawingCanvas = document.createElement('canvas');
+    drawingCanvas.id = 'float-drawing-canvas';
+    drawingCanvas.className = 'float-drawing-canvas';
+    drawingCanvas.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 9999;
+      background: transparent;
+    `;
+    
+    // Set canvas size
+    drawingCanvas.width = window.innerWidth;
+    drawingCanvas.height = window.innerHeight;
+    
+    drawingCtx = drawingCanvas.getContext('2d');
+    
+    const container = window.moatShadowRoot || document.body;
+    container.appendChild(drawingCanvas);
+    
+    // Set up mouse handlers
+    setupDrawingHandlers();
+    
+    // Update canvas size on resize
+    window.addEventListener('resize', updateCanvasSize);
+  }
+
+  // Update canvas size on window resize
+  function updateCanvasSize() {
+    if (!drawingCanvas) return;
+    drawingCanvas.width = window.innerWidth;
+    drawingCanvas.height = window.innerHeight;
+  }
+
+  // Remove canvas overlay
+  function removeDrawingCanvas() {
+    if (drawingCanvas) {
+      window.removeEventListener('resize', updateCanvasSize);
+      removeDrawingHandlers();
+      drawingCanvas.remove();
+      drawingCanvas = null;
+      drawingCtx = null;
+    }
+  }
+
+  // Enter drawing mode
+  function enterDrawingMode(toolName = 'rectangle') {
+    if (drawingMode) return; // Already in drawing mode
+    
+    // Exit comment mode if active
+    if (commentMode) {
+      exitCommentMode();
+    }
+    
+    drawingMode = true;
+    drawingTool = toolName;
+    
+    // Create canvas overlay
+    createDrawingCanvas();
+    
+    // Enable pointer events on canvas when drawing
+    if (drawingCanvas) {
+      drawingCanvas.style.pointerEvents = 'auto';
+    }
+    
+    // Add drawing mode class for cursor styling
+    document.body.classList.add('float-drawing-mode');
+    
+    console.log(`🎨 Entered drawing mode with tool: ${toolName}`);
+  }
+
+  // Exit drawing mode
+  function exitDrawingMode() {
+    if (!drawingMode) return;
+    
+    drawingMode = false;
+    drawingTool = null;
+    isDrawing = false;
+    currentRect = null;
+    
+    // Clear canvas
+    if (drawingCtx && drawingCanvas) {
+      drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    }
+    
+    // Disable pointer events
+    if (drawingCanvas) {
+      drawingCanvas.style.pointerEvents = 'none';
+    }
+    
+    // Remove drawing mode class
+    document.body.classList.remove('float-drawing-mode');
+    
+    // Remove canvas overlay (optional - can keep it for performance)
+    // removeDrawingCanvas();
+    
+    console.log('🎨 Exited drawing mode');
+  }
+
+  // Create comment box for freeform rectangle
+  async function createFreeformCommentBox(rectangleData, x, y) {
+    // If comment box already exists, shake it instead of creating new one
+    if (commentBox) {
+      shakeCommentBox();
+      return;
+    }
+    
+    // Capture screenshot with rectangle drawn on canvas
+    let screenshotData = null;
+    if (window.html2canvas && drawingCanvas) {
+      try {
+        // Draw final rectangle on canvas before capture (ensure it's visible)
+        if (drawingCtx && drawingTool) {
+          const tool = drawingTools[drawingTool];
+          if (tool && tool.draw) {
+            tool.draw(drawingCtx, rectangleData.x, rectangleData.y, rectangleData.width, rectangleData.height);
+          }
+        }
+        
+        // Wait a moment for canvas to render
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Calculate capture area around rectangle with padding
+        // rectangleData coordinates are viewport-relative (clientX/Y)
+        // html2canvas x/y are document-relative, so we need to add scroll position
+        const padding = 100;
+        const docX = rectangleData.x + window.scrollX;
+        const docY = rectangleData.y + window.scrollY;
+        const captureX = Math.max(0, docX - padding);
+        const captureY = Math.max(0, docY - padding);
+        const captureWidth = rectangleData.width + (padding * 2);
+        const captureHeight = rectangleData.height + (padding * 2);
+        
+        console.log('📸 Capturing screenshot with rectangle at:', {
+          rect: rectangleData,
+          docCoords: { x: docX, y: docY },
+          captureArea: { x: captureX, y: captureY, w: captureWidth, h: captureHeight }
+        });
+        
+        // Capture screenshot including the canvas overlay
+        // The canvas overlay is fixed position, so it will be captured correctly
+        const canvas = await html2canvas(document.body, {
+          backgroundColor: null,
+          scale: Math.min(window.devicePixelRatio || 1, 2),
+          logging: false,
+          x: captureX,
+          y: captureY,
+          width: captureWidth,
+          height: captureHeight,
+          useCORS: true,
+          allowTaint: false
+        });
+        
+        screenshotData = {
+          dataUrl: canvas.toDataURL('image/png'),
+          viewport: {
+            x: captureX,
+            y: captureY,
+            width: captureWidth,
+            height: captureHeight,
+            padding: padding
+          }
+        };
+        console.log('✅ Screenshot captured with rectangle');
+      } catch (e) {
+        console.warn('Screenshot capture failed:', e);
+      }
+    }
+    
+    // Create comment box
+    commentBox = document.createElement('div');
+    commentBox.className = 'float-comment-box';
+    commentBox.screenshotData = screenshotData;
+    commentBox.rectangleData = rectangleData; // Store rectangle data
+    commentBox.innerHTML = `
+      <textarea 
+        class="float-comment-input" 
+        placeholder="What needs to be fixed?"
+        autofocus
+      ></textarea>
+      <div class="float-comment-actions">
+        <button class="float-comment-cancel">Cancel</button>
+        <button class="float-comment-submit">Submit (Enter)</button>
+      </div>
+    `;
+    
+    // Append to shadow root for CSS isolation (if available), otherwise fallback to body
+    const container = window.moatShadowRoot || document.body;
+    container.appendChild(commentBox);
+    
+    // Position near cursor (using actual mouse coordinates)
+    const boxWidth = 320;
+    const boxHeight = 120; // Approximate height
+    const padding = 10;
+    
+    // Calculate optimal position near cursor
+    let left = x + padding;
+    let top = y + padding;
+    
+    // Ensure comment box stays within viewport boundaries
+    if (left + boxWidth > window.innerWidth) {
+      left = x - boxWidth - padding;
+    }
+    if (top + boxHeight > window.innerHeight) {
+      top = y - boxHeight - padding;
+    }
+    if (left < padding) {
+      left = padding;
+    }
+    if (top < padding) {
+      top = padding;
+    }
+    
+    // Apply position
+    commentBox.style.left = `${left}px`;
+    commentBox.style.top = `${top}px`;
+    
+    // Final adjustment after measuring actual box dimensions
+    const boxRect = commentBox.getBoundingClientRect();
+    if (boxRect.right > window.innerWidth) {
+      commentBox.style.left = `${window.innerWidth - boxRect.width - padding}px`;
+    }
+    if (boxRect.bottom > window.innerHeight) {
+      commentBox.style.top = `${window.innerHeight - boxRect.height - padding}px`;
+    }
+    
+    const textarea = commentBox.querySelector('textarea');
+    const submitBtn = commentBox.querySelector('.float-comment-submit');
+    const cancelBtn = commentBox.querySelector('.float-comment-cancel');
+    
+    // Focus textarea
+    setTimeout(() => textarea.focus(), 50);
+    
+    // Handle submit
+    const handleSubmit = async () => {
+      const content = textarea.value.trim();
+      if (!content) return;
+      
+      // Get rectangle data from comment box
+      const rectData = commentBox.rectangleData;
+      
+      // Create annotation object with freeform rectangle data
+      const annotation = {
+        type: "user_message",
+        role: "user",
+        content: content,
+        target: null, // No element selector for freeform
+        selectorMethod: "freeform",
+        boundingRect: {
+          x: Math.round(rectData.x),
+          y: Math.round(rectData.y),
+          w: Math.round(rectData.width),
+          h: Math.round(rectData.height)
+        },
+        // Include all bounding box formats
+        boundingBox: {
+          xyxy: rectData.xyxy,
+          xywh: {
+            x: rectData.x,
+            y: rectData.y,
+            width: rectData.width,
+            height: rectData.height
+          },
+          normalized: rectData.normalized,
+          viewport: rectData.viewport,
+          type: rectData.type
+        },
+        pageUrl: window.location.href,
+        timestamp: Date.now(),
+        sessionId: sessionId,
+        status: "to do",
+        id: `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      };
+      
+      // Use pre-captured screenshot
+      if (commentBox.screenshotData) {
+        annotation.screenshot = commentBox.screenshotData.dataUrl;
+        annotation.screenshotViewport = commentBox.screenshotData.viewport;
+        console.log('✅ Moat: Using pre-captured screenshot with rectangle');
+      }
+      
+      // Clear canvas after submission
+      if (drawingCtx && drawingCanvas) {
+        drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      }
+      
+      // Clean up drawing mode completely
+      exitDrawingMode();
+      removeDrawingCanvas();
+      
+      addToQueue(annotation);
+      removeCommentBox();
+    };
+    
+    // Event listeners
+    submitBtn.addEventListener('click', handleSubmit);
+    cancelBtn.addEventListener('click', () => {
+      // Clear canvas and exit drawing mode
+      if (drawingCtx && drawingCanvas) {
+        drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+      }
+      exitDrawingMode();
+      removeDrawingCanvas();
+      removeCommentBox();
+    });
+    
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      } else if (e.key === 'Escape') {
+        // Clear canvas and exit drawing mode
+        if (drawingCtx && drawingCanvas) {
+          drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+        }
+        exitDrawingMode();
+        removeDrawingCanvas();
+        removeCommentBox();
+      }
+    });
+  }
+
   // Global hover overlay element
   let hoverOverlay = null;
 
@@ -3246,6 +3630,190 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     }
   });
 
+  // Drawing mode mouse handlers
+  function setupDrawingHandlers() {
+    if (!drawingCanvas) return;
+    
+    // Mouse down - start drawing
+    drawingCanvas.addEventListener('mousedown', handleDrawingMouseDown, true);
+    
+    // Mouse move - update preview
+    drawingCanvas.addEventListener('mousemove', handleDrawingMouseMove, true);
+    
+    // Mouse up - finalize rectangle
+    drawingCanvas.addEventListener('mouseup', handleDrawingMouseUp, true);
+    
+    // Mouse leave - cancel drawing if mouse leaves canvas
+    drawingCanvas.addEventListener('mouseleave', handleDrawingMouseLeave, true);
+  }
+
+  function removeDrawingHandlers() {
+    if (!drawingCanvas) return;
+    
+    drawingCanvas.removeEventListener('mousedown', handleDrawingMouseDown, true);
+    drawingCanvas.removeEventListener('mousemove', handleDrawingMouseMove, true);
+    drawingCanvas.removeEventListener('mouseup', handleDrawingMouseUp, true);
+    drawingCanvas.removeEventListener('mouseleave', handleDrawingMouseLeave, true);
+  }
+
+  function handleDrawingMouseDown(e) {
+    if (!drawingMode || !drawingTool) return;
+    
+    // Check if clicking on Moat UI elements
+    const path = e.composedPath();
+    const clickingOnMoatUI = path.some(el => 
+      el.classList && (
+        el.classList.contains('float-moat') || 
+        el.classList.contains('float-comment-box') ||
+        el.id === 'moat-shadow-host'
+      )
+    );
+    
+    if (clickingOnMoatUI) {
+      return; // Don't start drawing if clicking on Moat UI
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    
+    isDrawing = true;
+    
+    // Get coordinates relative to viewport (clientX/Y already accounts for scroll)
+    drawStartX = e.clientX;
+    drawStartY = e.clientY;
+    
+    currentRect = {
+      x: drawStartX,
+      y: drawStartY,
+      width: 0,
+      height: 0
+    };
+    
+    console.log('🎨 Started drawing at:', drawStartX, drawStartY);
+  }
+
+  function handleDrawingMouseMove(e) {
+    if (!drawingMode || !isDrawing || !drawingTool) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Calculate current rectangle (clientX/Y is viewport-relative)
+    const currentX = e.clientX;
+    const currentY = e.clientY;
+    
+    currentRect = {
+      x: Math.min(drawStartX, currentX),
+      y: Math.min(drawStartY, currentY),
+      width: Math.abs(currentX - drawStartX),
+      height: Math.abs(currentY - drawStartY)
+    };
+    
+    // Redraw canvas with preview
+    redrawCanvas();
+  }
+
+  function handleDrawingMouseUp(e) {
+    if (!drawingMode || !isDrawing || !drawingTool) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    
+    // Finalize rectangle
+    if (currentRect && currentRect.width > 5 && currentRect.height > 5) {
+      // Rectangle is large enough, show comment box
+      finalizeRectangle(e.clientX, e.clientY);
+    } else {
+      // Rectangle too small, cancel
+      cancelDrawing();
+    }
+  }
+
+  function handleDrawingMouseLeave(e) {
+    if (!drawingMode || !isDrawing) return;
+    
+    // Cancel drawing if mouse leaves canvas
+    cancelDrawing();
+  }
+
+  function redrawCanvas() {
+    if (!drawingCtx || !drawingCanvas || !currentRect) return;
+    
+    // Clear canvas
+    drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    
+    // Draw current rectangle preview
+    const tool = drawingTools[drawingTool];
+    if (tool && tool.draw) {
+      tool.draw(drawingCtx, currentRect.x, currentRect.y, currentRect.width, currentRect.height);
+    }
+  }
+
+  function cancelDrawing() {
+    isDrawing = false;
+    currentRect = null;
+    
+    // Clear canvas
+    if (drawingCtx && drawingCanvas) {
+      drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    }
+  }
+
+  function finalizeRectangle(mouseX, mouseY) {
+    if (!currentRect || !drawingTool) return;
+    
+    const rect = currentRect;
+    isDrawing = false;
+    
+    // Store rectangle data for screenshot capture
+    // Note: rect coordinates are viewport-relative (clientX/Y), which is correct for canvas overlay
+    const rectangleData = {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      // Calculate normalized coordinates (0-1)
+      normalized: {
+        x: rect.x / window.innerWidth,
+        y: rect.y / window.innerHeight,
+        width: rect.width / window.innerWidth,
+        height: rect.height / window.innerHeight
+      },
+      // Calculate xyxy format (x1, y1, x2, y2)
+      xyxy: {
+        x1: rect.x,
+        y1: rect.y,
+        x2: rect.x + rect.width,
+        y2: rect.y + rect.height
+      },
+      // Calculate xywh format (x, y, width, height) - same as base but explicit
+      xywh: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height
+      },
+      // Viewport info
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight
+      },
+      type: 'freeform'
+    };
+    
+    console.log('🎨 Finalized rectangle:', rectangleData);
+    
+    // Exit drawing mode (but keep canvas visible for screenshot)
+    drawingMode = false;
+    drawingTool = null;
+    document.body.classList.remove('float-drawing-mode');
+    
+    // Show comment box at cursor position
+    createFreeformCommentBox(rectangleData, mouseX, mouseY);
+  }
+
   // Click handler
   document.addEventListener('click', (e) => {
     if (!commentMode) return;
@@ -3283,6 +3851,15 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
 
   // Listen for keyboard events
   document.addEventListener('keydown', (e) => {
+    // Exit drawing mode with Escape
+    if (e.key === 'Escape' && drawingMode) {
+      e.preventDefault();
+      exitDrawingMode();
+      // Clean up canvas overlay when exiting via Esc
+      removeDrawingCanvas();
+      return;
+    }
+    
     // Exit comment mode with Escape (works on all tabs, even if not visible)
     if (e.key === 'Escape' && commentMode) {
       e.preventDefault();
@@ -3290,27 +3867,70 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       return;
     }
     
-    // 'C' key should ONLY work when sidebar is visible on the active tab
-    if ((e.key === 'C' || e.key === 'c') && !commentMode && !e.target.matches('input, textarea')) {
-      // Check if tab is visible AND sidebar is open
-      const sidebarVisible = window.Moat && window.Moat.isSidebarVisible ? window.Moat.isSidebarVisible() : false;
-      if (document.hidden || !sidebarVisible) {
-        return; // Ignore the keystroke
-      }
-      
+    // Don't process keyboard shortcuts if in input fields
+    if (e.target.matches('input, textarea')) {
+      return;
+    }
+    
+    // Check if sidebar is visible (for C key)
+    const sidebarVisible = window.Moat && window.Moat.isSidebarVisible ? window.Moat.isSidebarVisible() : false;
+    const canUseShortcuts = !document.hidden && sidebarVisible;
+    
+    // Check if user has started interacting (can't switch tools once started)
+    // - If commentBox exists, they've started/finished a comment or drawing
+    // - If isDrawing is true, they're actively drawing a rectangle
+    const hasStartedComment = commentBox !== null;
+    const hasStartedDrawing = isDrawing === true;
+    const canSwitchTools = !hasStartedComment && !hasStartedDrawing;
+    
+    // Toggle between Comment and Rectangle modes with C and R keys
+    if ((e.key === 'R' || e.key === 'r') && canSwitchTools && canUseShortcuts) {
       e.preventDefault();
       
-      // Dispatch event to remove persistent notification
-      window.dispatchEvent(new CustomEvent('moat:c-key-pressed'));
-      
-      // Mark that C has been pressed
-      if (!hasPressedC) {
-        hasPressedC = true;
-        // Show the click instruction notification
-        showNotification('Click anywhere to comment', 'info', 'click-instruction');
+      if (commentMode) {
+        // Switch from comment mode to rectangle mode
+        exitCommentMode();
+        enterDrawingMode('rectangle');
+        showNotification('Switched to Rectangle tool', 'info');
+      } else if (!drawingMode) {
+        // Enter rectangle mode (not switching, just entering)
+        enterDrawingMode('rectangle');
       }
+      return;
+    }
+    
+    // 'C' key should ONLY work when sidebar is visible on the active tab
+    if ((e.key === 'C' || e.key === 'c') && canSwitchTools && canUseShortcuts) {
+      e.preventDefault();
       
-      enterCommentMode();
+      if (drawingMode) {
+        // Switch from drawing mode to comment mode
+        exitDrawingMode();
+        // Dispatch event to remove persistent notification
+        window.dispatchEvent(new CustomEvent('moat:c-key-pressed'));
+        
+        // Mark that C has been pressed
+        if (!hasPressedC) {
+          hasPressedC = true;
+        }
+        
+        enterCommentMode();
+        showNotification('Switched to Comment tool', 'info');
+      } else if (!commentMode) {
+        // Enter comment mode (not switching, just entering)
+        // Dispatch event to remove persistent notification
+        window.dispatchEvent(new CustomEvent('moat:c-key-pressed'));
+        
+        // Mark that C has been pressed
+        if (!hasPressedC) {
+          hasPressedC = true;
+          // Show the click instruction notification
+          showNotification('Click anywhere to comment', 'info', 'click-instruction');
+        }
+        
+        enterCommentMode();
+      }
+      return;
     }
     
     // Toggle sidebar with Cmd+Shift+F
@@ -3691,11 +4311,11 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     console.log('🔧 Moat: Content script connection state reset complete');
   });
 
-  // Listen for comment mode trigger from New button
+  // Listen for comment mode trigger from Tools button
   window.addEventListener('moat:trigger-comment-mode', (e) => {
-    console.log('🔧 Moat: Received trigger comment mode event from New button');
+    console.log('🔧 Moat: Received trigger comment mode event from Tools button');
     
-    if (!commentMode) {
+    if (!commentMode && !drawingMode) {
       // Dispatch event to remove persistent notification (same as C key)
       window.dispatchEvent(new CustomEvent('moat:c-key-pressed'));
       
@@ -3708,9 +4328,22 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       
       // Enter comment mode
       enterCommentMode();
-      console.log('🔧 Moat: Comment mode activated via New button');
+      console.log('🔧 Moat: Comment mode activated via Tools button');
     } else {
-      console.log('🔧 Moat: Already in comment mode');
+      console.log('🔧 Moat: Already in comment mode or drawing mode');
+    }
+  });
+
+  // Listen for rectangle mode trigger from Tools button
+  window.addEventListener('moat:trigger-rectangle-mode', (e) => {
+    console.log('🔧 Moat: Received trigger rectangle mode event from Tools button');
+    
+    if (!drawingMode && !commentMode) {
+      // Enter rectangle drawing mode
+      enterDrawingMode('rectangle');
+      console.log('🔧 Moat: Rectangle drawing mode activated via Tools button');
+    } else {
+      console.log('🔧 Moat: Already in drawing mode or comment mode');
     }
   });
 })(); 

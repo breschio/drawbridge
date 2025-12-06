@@ -33,20 +33,28 @@ const TASK_STATUS = {
  * @returns {Object} Properly structured task object
  */
 function createTaskObject(taskData) {
-    if (!taskData.title || !taskData.comment || !taskData.selector) {
-        throw new Error('Task must have title, comment, and selector');
+    if (!taskData.title || !taskData.comment) {
+        throw new Error('Task must have title and comment');
     }
 
-    return {
+    // Selector is optional for freeform rectangles
+    const task = {
         id: generateUUID(),
         title: taskData.title,
         comment: taskData.comment,
-        selector: taskData.selector,
+        selector: taskData.selector || null, // Allow null for freeform
         boundingRect: taskData.boundingRect || { x: 0, y: 0, w: 0, h: 0 },
         screenshotPath: taskData.screenshotPath || '',
         status: TASK_STATUS.TO_DO,
         timestamp: Date.now()
     };
+
+    // Preserve bounding box data for freeform rectangles
+    if (taskData.boundingBox) {
+        task.boundingBox = taskData.boundingBox;
+    }
+
+    return task;
 }
 
 /**
@@ -55,12 +63,18 @@ function createTaskObject(taskData) {
  * @returns {boolean} True if valid, throws error if invalid
  */
 function validateTaskObject(task) {
-    const requiredFields = ['id', 'title', 'comment', 'selector', 'status', 'timestamp'];
+    const requiredFields = ['id', 'title', 'comment', 'status', 'timestamp'];
     
     for (const field of requiredFields) {
         if (!task.hasOwnProperty(field)) {
             throw new Error(`Task missing required field: ${field}`);
         }
+    }
+
+    // Selector is optional for freeform rectangles (can be null)
+    // But if present, it should be a string
+    if (task.hasOwnProperty('selector') && task.selector !== null && typeof task.selector !== 'string') {
+        throw new Error(`Task selector must be a string or null, got: ${typeof task.selector}`);
     }
 
     if (!Object.values(TASK_STATUS).includes(task.status)) {
@@ -167,11 +181,28 @@ class TaskStore {
         const task = createTaskObject(taskData);
         
         // Check for functional duplicates (same selector and comment content)
-        const functionalDuplicate = this.tasks.find(existingTask => 
-            existingTask.selector === task.selector && 
-            existingTask.comment.trim() === task.comment.trim() &&
-            existingTask.status !== TASK_STATUS.DONE
-        );
+        // For freeform rectangles (selector is null), check bounding box similarity instead
+        const functionalDuplicate = this.tasks.find(existingTask => {
+            if (task.selector === null && existingTask.selector === null) {
+                // Both are freeform - check if bounding boxes are similar (within 10px)
+                const taskRect = task.boundingRect || task.boundingBox?.xywh;
+                const existingRect = existingTask.boundingRect || existingTask.boundingBox?.xywh;
+                if (taskRect && existingRect) {
+                    const xDiff = Math.abs(taskRect.x - existingRect.x);
+                    const yDiff = Math.abs(taskRect.y - existingRect.y);
+                    const wDiff = Math.abs((taskRect.w || taskRect.width) - (existingRect.w || existingRect.width));
+                    const hDiff = Math.abs((taskRect.h || taskRect.height) - (existingRect.h || existingRect.height));
+                    return xDiff < 10 && yDiff < 10 && wDiff < 10 && hDiff < 10 &&
+                           existingTask.comment.trim() === task.comment.trim() &&
+                           existingTask.status !== TASK_STATUS.DONE;
+                }
+                return false;
+            }
+            // Standard element-based duplicate check
+            return existingTask.selector === task.selector && 
+                   existingTask.comment.trim() === task.comment.trim() &&
+                   existingTask.status !== TASK_STATUS.DONE;
+        });
 
         if (functionalDuplicate) {
             console.warn('Functional duplicate detected, updating timestamp and refreshing existing task');

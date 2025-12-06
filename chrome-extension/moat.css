@@ -74,11 +74,36 @@
 
 /* Comment Mode */
 body.float-comment-mode {
-  cursor: crosshair !important;
+  cursor: pointer !important;
 }
 
 body.float-comment-mode * {
+  cursor: pointer !important;
+}
+
+/* Drawing Mode */
+body.float-drawing-mode {
   cursor: crosshair !important;
+}
+
+body.float-drawing-mode * {
+  cursor: crosshair !important;
+}
+
+/* Drawing Canvas Overlay */
+.float-drawing-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  background: transparent;
+}
+
+.float-drawing-canvas[style*="pointer-events: auto"] {
+  cursor: crosshair;
 }
 
 /* Element Highlight */
@@ -549,19 +574,24 @@ body.float-comment-mode * {
 }
 
 .float-moat.float-moat-right .float-moat-project-dropdown {
-  max-width: 120px;
-  padding: 4px 8px;
+  max-width: 70px;
+  padding: 4px 10px;
   height: 28px;
   font-size: 11px;
   gap: 4px;
 }
 
 .float-moat.float-moat-right .float-project-label {
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 1;
+  display: none;
+}
+
+.float-moat.float-moat-right .float-project-divider {
+  height: 12px;
+}
+
+.float-moat.float-moat-right .float-project-chevron {
+  width: 12px;
+  height: 12px;
 }
 
 /* Compact action buttons for right position */  
@@ -637,19 +667,24 @@ body.float-comment-mode * {
 }
 
 .float-moat.float-moat-left .float-moat-project-dropdown {
-  max-width: 120px;
-  padding: 4px 8px;
+  max-width: 70px;
+  padding: 4px 10px;
   height: 28px;
   font-size: 11px;
   gap: 4px;
 }
 
 .float-moat.float-moat-left .float-project-label {
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 1;
+  display: none;
+}
+
+.float-moat.float-moat-left .float-project-divider {
+  height: 12px;
+}
+
+.float-moat.float-moat-left .float-project-chevron {
+  width: 12px;
+  height: 12px;
 }
 
 /* Compact action buttons for left position */  
@@ -1182,7 +1217,7 @@ body.float-comment-mode * {
 .float-moat-tabs-below-header {
   padding: 12px 16px 8px 16px;
   background: var(--moat-bg-primary);
-  border-bottom: 1px solid var(--moat-border);
+  border-bottom: none;
   display: none; /* Hidden by default */
 }
 
@@ -1634,9 +1669,12 @@ body.float-comment-mode * {
 .float-project-indicator {
   width: 8px;
   height: 8px;
+  min-width: 8px;
+  min-height: 8px;
   border-radius: 50%;
   background: #dc2626;
   transition: all 0.3s ease;
+  flex-shrink: 0;
 }
 
 .float-project-indicator.float-project-connected {
@@ -1655,12 +1693,12 @@ body.float-comment-mode * {
   flex-shrink: 0;
 }
 
-/* New Comment Button */
+/* Tools Dropdown Button */
 .float-moat-new-comment-container {
   /* Spacing handled by parent gap: 12px */
 }
 
-.float-moat-new-comment-btn {
+.float-moat-tools-dropdown {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1679,25 +1717,52 @@ body.float-comment-mode * {
   box-shadow: 0 1px 2px var(--moat-shadow);
 }
 
-.float-moat-new-comment-btn:hover {
+.float-moat-tools-dropdown:hover {
   background: var(--moat-bg-secondary);
   border-color: var(--moat-border-light);
   color: var(--moat-text-secondary);
   box-shadow: 0 1px 3px var(--moat-shadow);
 }
 
-.float-comment-icon {
+.float-tools-icon {
   width: 14px;
   height: 14px;
+  min-width: 14px;
+  min-height: 14px;
   fill: currentColor;
   flex-shrink: 0;
 }
 
-.float-comment-text {
+.float-tools-text {
   font-size: 12px;
   font-weight: 500;
   color: inherit;
   white-space: nowrap;
+}
+
+.float-tools-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--moat-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.float-tools-chevron {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  min-height: 12px;
+  margin-left: auto;
+  opacity: 0.6;
+  transition: transform 0.2s;
+  fill: var(--moat-text-tertiary);
+  flex-shrink: 0;
+}
+
+.float-moat-tools-dropdown:hover .float-tools-chevron {
+  opacity: 1;
+  fill: var(--moat-text-secondary);
 }
 
 /* Compact styling for right position */
@@ -1705,43 +1770,62 @@ body.float-comment-mode * {
   /* Spacing handled by parent gap */
 }
 
-.float-moat.float-moat-right .float-moat-new-comment-btn {
-  padding: 6px;
+.float-moat.float-moat-right .float-moat-tools-dropdown {
+  max-width: 60px;
+  padding: 4px 8px;
   height: 28px;
-  width: 28px;
   font-size: 11px;
   gap: 4px;
 }
 
-.float-moat.float-moat-right .float-comment-icon {
+.float-moat.float-moat-right .float-tools-text {
+  display: none;
+}
+
+.float-moat.float-moat-right .float-tools-icon {
   width: 12px;
   height: 12px;
 }
 
-.float-moat.float-moat-right .float-comment-text {
+.float-moat.float-moat-right .float-tools-divider {
+  height: 12px;
+}
+
+.float-moat.float-moat-right .float-tools-chevron {
+  width: 12px;
+  height: 12px;
+}
+
+/* Left position - Compact top bar layout (mirrors right position) */
+.float-moat.float-moat-left .float-moat-tools-dropdown {
+  max-width: 60px;
+  padding: 4px 8px;
+  height: 28px;
+  font-size: 11px;
+  gap: 4px;
+}
+
+.float-moat.float-moat-left .float-tools-text {
   display: none;
+}
+
+.float-moat.float-moat-left .float-tools-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.float-moat.float-moat-left .float-tools-divider {
+  height: 12px;
+}
+
+.float-moat.float-moat-left .float-tools-chevron {
+  width: 12px;
+  height: 12px;
 }
 
 /* Compact styling for left position (same as right) */
 .float-moat.float-moat-left .float-moat-new-comment-container {
   /* Spacing handled by parent gap */
-}
-
-.float-moat.float-moat-left .float-moat-new-comment-btn {
-  padding: 6px;
-  height: 28px;
-  width: 28px;
-  font-size: 11px;
-  gap: 4px;
-}
-
-.float-moat.float-moat-left .float-comment-icon {
-  width: 12px;
-  height: 12px;
-}
-
-.float-moat.float-moat-left .float-comment-text {
-  display: none;
 }
 
 /* New Project Dropdown Styling */
@@ -1753,7 +1837,7 @@ body.float-comment-mode * {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   height: 32px;
   background: var(--moat-bg-primary);
   border: 1px solid var(--moat-border);
@@ -1775,6 +1859,8 @@ body.float-comment-mode * {
 .float-project-folder-icon {
   width: 12px;
   height: 12px;
+  min-width: 12px;
+  min-height: 12px;
   fill: var(--moat-text-tertiary);
   transition: fill 0.2s;
   flex-shrink: 0;
@@ -1795,10 +1881,13 @@ body.float-comment-mode * {
 .float-project-chevron {
   width: 12px;
   height: 12px;
+  min-width: 12px;
+  min-height: 12px;
   margin-left: auto;
   opacity: 0.6;
   transition: transform 0.2s;
   fill: var(--moat-text-tertiary);
+  flex-shrink: 0;
 }
 
 .float-moat-project-dropdown:hover .float-project-chevron {
@@ -1861,14 +1950,40 @@ body.float-comment-mode * {
   min-width: 0; /* Allow flex items to shrink if needed */
 }
 
-.float-project-menu-item > span:not(.float-badge) {
+.float-project-menu-item > span:not(.float-badge):not(.float-menu-shortcut) {
   flex: 1;
   text-align: left;
+}
+
+/* Hide menu item text and shortcuts when sidebar is in left/right position */
+.float-moat.float-moat-right .float-menu-item-text,
+.float-moat.float-moat-left .float-menu-item-text {
+  display: none;
+}
+
+.float-moat.float-moat-right .float-menu-shortcut,
+.float-moat.float-moat-left .float-menu-shortcut {
+  display: none;
 }
 
 .float-project-menu-item span:last-child {
   margin-left: auto;
   flex-shrink: 0; /* Prevent badge from shrinking */
+}
+
+.float-menu-shortcut {
+  margin-left: auto;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--moat-text-tertiary);
+  background: var(--moat-bg-secondary);
+  border: 1px solid var(--moat-border);
+  border-radius: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-width: 20px;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .float-project-menu-item:hover {

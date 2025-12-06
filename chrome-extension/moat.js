@@ -1069,11 +1069,15 @@
               </div>
             </div>
             <div class="float-moat-new-comment-container">
-              <button class="float-moat-new-comment-btn" id="float-new-comment-btn" title="Make new comment">
-                <svg class="float-comment-icon" viewBox="0 0 24 24">
+              <button class="float-moat-tools-dropdown" id="float-tools-dropdown" title="Tools">
+                <svg class="float-tools-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <polygon points="23 11 23 13 22 13 22 14 14 14 14 22 13 22 13 23 11 23 11 22 10 22 10 14 2 14 2 13 1 13 1 11 2 11 2 10 10 10 10 2 11 2 11 1 13 1 13 2 14 2 14 10 22 10 22 11 23 11"/>
                 </svg>
-                <span class="float-comment-text">New</span>
+                <span class="float-tools-text">Tools</span>
+                <span class="float-tools-divider"></span>
+                <svg class="float-tools-chevron" viewBox="0 0 24 24">
+                  <polygon points="5 7 7 7 7 8 8 8 8 9 9 9 9 10 10 10 10 11 11 11 11 12 13 12 13 11 14 11 14 10 15 10 15 9 16 9 16 8 17 8 17 7 19 7 19 8 20 8 20 10 19 10 19 11 18 11 18 12 17 12 17 13 16 13 16 14 15 14 15 15 14 15 14 16 13 16 13 17 11 17 11 16 10 16 10 15 9 15 9 14 8 14 8 13 7 13 7 12 6 12 6 11 5 11 5 10 4 10 4 8 5 8 5 7"/>
+                </svg>
               </button>
             </div>
             <div class="float-moat-project-status-container">
@@ -1161,15 +1165,13 @@
     // Event listeners
     moat.querySelector('.float-moat-close').addEventListener('click', hideMoat);
     
-    // New comment button functionality
-    const newCommentBtn = moat.querySelector('.float-moat-new-comment-btn');
-    if (newCommentBtn) {
-      newCommentBtn.addEventListener('click', function(e) {
+    // Tools dropdown button functionality
+    const toolsDropdown = moat.querySelector('.float-moat-tools-dropdown');
+    if (toolsDropdown) {
+      toolsDropdown.addEventListener('click', function(e) {
         e.stopPropagation();
-        console.log('🔧 Moat: New button clicked, triggering comment mode');
-        
-        // Trigger comment mode via custom event (content script listens for this)
-        window.dispatchEvent(new CustomEvent('moat:trigger-comment-mode'));
+        console.log('🔧 Moat: Tools button clicked, showing tools menu');
+        showToolsMenu();
       });
     }
     
@@ -1296,6 +1298,7 @@
     const moreMenu = document.querySelector('.float-more-menu');
     if (projectMenu) projectMenu.remove();
     if (moreMenu) moreMenu.remove();
+    // Note: tools menu uses same class as project menu, so it's already handled above
   }
 
   // Shared function for positioning menus with smart placement
@@ -1342,6 +1345,67 @@
       menu.style.opacity = '1';
       menu.style.transform = 'translateY(0) scale(1)';
     });
+  }
+
+  // Show tools menu
+  function showToolsMenu() {
+    // Close all menus first to ensure only one is open at a time
+    closeAllMenus();
+    
+    const menu = document.createElement('div');
+    menu.className = 'float-project-menu'; // Reuse same styling
+    menu.innerHTML = `
+      <div class="float-project-menu-item" data-action="comment" title="Comment (C)">
+        <svg style="width: 12px; height: 12px; fill: #6B7280;" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="m22,8v-2h-1v-1h-1v-1h-2v-1h-3v-1h-6v1h-3v1h-2v1h-1v1h-1v2h-1v6h1v2h1v2h-1v1h-1v2h5v-1h1v-1h2v1h6v-1h3v-1h2v-1h1v-1h1v-2h1v-6h-1Zm-6,5v-1h-1v-2h1v-1h2v1h1v2h-1v1h-2Zm-6-1v-2h1v-1h2v1h1v2h-1v1h-2v-1h-1Zm-2-3v1h1v2h-1v1h-2v-1h-1v-2h1v-1h2Z"/>
+        </svg>
+        <span class="float-menu-item-text">Comment</span>
+        <span class="float-menu-shortcut">C</span>
+      </div>
+      <div class="float-project-menu-item" data-action="rectangle" title="Rectangle (R)">
+        <svg style="width: 12px; height: 12px; fill: #6B7280;" viewBox="0 0 24 24">
+          <rect x="3" y="5" width="18" height="14" fill="none" stroke="#6B7280" stroke-width="2"/>
+        </svg>
+        <span class="float-menu-item-text">Rectangle</span>
+        <span class="float-menu-shortcut">R</span>
+      </div>
+    `;
+    
+    // Position menu below button (or above if docked at bottom)
+    const button = moat.querySelector('.float-moat-tools-dropdown');
+    if (!button) {
+      console.warn('Could not find tools dropdown button');
+      return;
+    }
+    
+    // Use shared positioning function
+    positionMenu(menu, button);
+    
+    // Handle menu clicks
+    menu.addEventListener('click', async (e) => {
+      const item = e.target.closest('.float-project-menu-item');
+      if (item) {
+        const action = item.dataset.action;
+        if (action === 'comment') {
+          // Trigger comment mode via custom event (content script listens for this)
+          window.dispatchEvent(new CustomEvent('moat:trigger-comment-mode'));
+        } else if (action === 'rectangle') {
+          // Trigger rectangle drawing mode via custom event
+          window.dispatchEvent(new CustomEvent('moat:trigger-rectangle-mode'));
+        }
+      }
+      menu.remove();
+    });
+    
+    // Close menu on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function closeMenu(e) {
+        if (!menu.contains(e.target) && !button.contains(e.target)) {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
+        }
+      });
+    }, 0);
   }
 
   // Show project menu
