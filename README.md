@@ -34,7 +34,7 @@ Make comments in the browser (like in Figma) and send them to Claude Code and Cu
 💬 3. Make Comments
 -------------------
 
-1.  Press `c` in your browser, to turn your cursor into a cross hair
+1.  Press `C` in your browser (or click the Tools dropdown → Comment), to turn your cursor into a pointer
 
 2.  Hover over your page to see selectable DOM elements you can leave comments on
 
@@ -47,8 +47,32 @@ Make comments in the browser (like in Figma) and send them to Claude Code and Cu
 ![db-comments-1](https://github.com/breschio/drawbridge-media/blob/main/drawbridge-comment-2.gif?raw=true)
 
 
+📐 4. Draw Rectangles (Freeform Annotations)
+----------------------------------------------
 
-🤖 4. Process with AI
+1.  Press `R` in your browser (or click the Tools dropdown → Rectangle), to enter rectangle drawing mode
+
+2.  Your cursor will change to a crosshair, indicating you're in drawing mode
+
+3.  Click and drag on the page to draw a rectangle around the area you want to annotate
+
+4.  Release the mouse button to finalize the rectangle - a comment box will appear at your cursor
+
+5.  Type your comment and hit `Submit` or press `Enter`
+
+6.  The rectangle coordinates and screenshot will be saved with your task
+
+**Keyboard Shortcuts:**
+- Press `C` to switch to Comment mode (pointer cursor)
+- Press `R` to switch to Rectangle mode (crosshair cursor)
+- Press `Esc` to exit either mode
+- You can toggle between modes with `C` and `R` before starting an interaction
+
+![db-rectangle-drawing](https://github.com/breschio/drawbridge-media/raw/main/drawbridge-rectangle.gif)
+
+
+
+🤖 5. Process with AI
 -----------------------
 
 Drawbridge works with **Cursor** and **Claude Code**:
@@ -98,7 +122,7 @@ Drawbridge works with **Cursor** and **Claude Code**:
 -   ✅ **Status tracking** - Follows `"to do" → "doing" → "done"` lifecycle
 
 
-👩🏼‍🎨 5. Review your changes
+👩🏼‍🎨 6. Review your changes
 ------------------------------
 
 1.  Go back to your browser to see your changes

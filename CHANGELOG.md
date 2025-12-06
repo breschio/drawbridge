@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2025-01-XX
+
+### Added
+- **Tools Dropdown Menu**: Replaced "New" button with a comprehensive Tools dropdown featuring Comment and Rectangle tools
+- **Keyboard Shortcuts**: Added `C` key for Comment mode and `R` key for Rectangle drawing mode
+- **Tool Toggling**: Users can now toggle between Comment and Rectangle modes using keyboard shortcuts (C/R) before starting an interaction
+- **Visual Tool Indicators**: Different cursor styles for each mode - pointer cursor for Comment mode, crosshair cursor for Rectangle mode
+- **Tooltip System**: Enhanced tooltips show keyboard shortcuts in menu items and provide contextual information when hovering over compact buttons
+- **Freeform Rectangle Tool**: New drawing tool that allows users to draw rectangles anywhere on the page for annotations
+- **Compact Mode**: When sidebar is docked left or right, button text is hidden and shown as tooltips for a cleaner, more compact interface
+
+### Changed
+- **Tools Button**: Converted from simple "New" button to dropdown with plus icon, divider, and chevron
+- **Project Button**: Updated to match Tools button styling with consistent dropdown structure
+- **Menu Layout**: Menu items now display keyboard shortcuts (e.g., "Comment (C)", "Rectangle (R)") for better discoverability
+- **Icon Updates**: New plus icon for Tools button and comment-dots icon for Comment menu item
+
+### Improved
+- **Button Consistency**: Both Tools and Project buttons now have matching padding, spacing, and dropdown structure
+- **Visual Polish**: Removed divider line under status tab bar for cleaner appearance
+- **Responsive Design**: Better handling of compact layouts when sidebar is docked in different positions
+- **TaskStore Compatibility**: Updated to support freeform rectangles without requiring CSS selectors
+
+### Fixed
+- **Button Padding**: Fixed project button padding to match Tools button, preventing chevron from being squished
+- **Icon Sizing**: Ensured all icons maintain consistent sizing and don't warp in compact mode
+- **Tool Switching**: Prevented tool switching once user has started interacting (clicked or started drawing)
+
 ## [1.0.3] - 2025-10-25
 
 ### Added
