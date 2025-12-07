@@ -758,8 +758,9 @@ body.float-drawing-mode * {
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   letter-spacing: 0.5px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
+  line-height: 1;
 }
 
 .float-moat.float-moat-bottom .float-moat-right-controls {
@@ -1006,8 +1007,9 @@ body.float-drawing-mode * {
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   letter-spacing: 0.5px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
+  line-height: 1;
 }
 
 .float-moat-actions {
@@ -1053,6 +1055,7 @@ body.float-drawing-mode * {
   height: 20px;
   fill: currentColor;
   flex-shrink: 0;
+  align-self: baseline;
 }
 
 /* Right Controls Container */

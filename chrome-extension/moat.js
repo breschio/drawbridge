@@ -2044,8 +2044,8 @@
     
     const currentTheme = getCurrentTheme();
     const logoPath = currentTheme === 'dark' 
-      ? chrome.runtime.getURL('icons/db-logo-light.png')
-      : chrome.runtime.getURL('icons/db-logo-dark.png');
+      ? chrome.runtime.getURL('icons/drawbridge-icon-dark.svg')
+      : chrome.runtime.getURL('icons/drawbridge-icon-light.svg');
     
     logo.src = logoPath;
     console.log('Moat: Logo updated for', currentTheme, 'theme');
