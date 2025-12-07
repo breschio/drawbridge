@@ -1031,8 +1031,43 @@
     return connectionManager.getTooltipText();
   }
 
+  // Ensure Google Fonts are loaded (defensive check)
+  function ensureGoogleFontsLoaded() {
+    if (!document.getElementById('moat-google-fonts')) {
+      // Create preconnect links for performance
+      const preconnect1 = document.createElement('link');
+      preconnect1.rel = 'preconnect';
+      preconnect1.href = 'https://fonts.googleapis.com';
+      preconnect1.id = 'moat-google-fonts-preconnect-1';
+      
+      const preconnect2 = document.createElement('link');
+      preconnect2.rel = 'preconnect';
+      preconnect2.href = 'https://fonts.gstatic.com';
+      preconnect2.crossOrigin = 'anonymous';
+      preconnect2.id = 'moat-google-fonts-preconnect-2';
+
+      // Create the main font stylesheet link
+      const fontLink = document.createElement('link');
+      fontLink.id = 'moat-google-fonts';
+      fontLink.rel = 'stylesheet';
+      fontLink.href = 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap';
+
+      // Inject all links into head
+      const head = document.head || document.getElementsByTagName('head')[0];
+      if (head) {
+        head.appendChild(preconnect1);
+        head.appendChild(preconnect2);
+        head.appendChild(fontLink);
+        console.log('✅ Moat: Google Fonts injected from moat.js (defensive check)');
+      }
+    }
+  }
+
   // Create Moat sidebar
   function createMoat() {
+    // Ensure fonts are loaded before creating UI
+    ensureGoogleFontsLoaded();
+    
     console.log('Moat: createMoat called, creating sidebar element...');
     moat = document.createElement('div');
     moat.id = 'moat-moat';

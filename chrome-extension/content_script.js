@@ -39,6 +39,46 @@
   // Generate unique session ID
   const sessionId = `moat-session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+  // Inject Google Fonts reliably into page head
+  function injectGoogleFonts() {
+    // Check if fonts are already injected to avoid duplicates
+    if (document.getElementById('moat-google-fonts')) {
+      return;
+    }
+
+    // Create preconnect links for performance
+    const preconnect1 = document.createElement('link');
+    preconnect1.rel = 'preconnect';
+    preconnect1.href = 'https://fonts.googleapis.com';
+    preconnect1.id = 'moat-google-fonts-preconnect-1';
+    
+    const preconnect2 = document.createElement('link');
+    preconnect2.rel = 'preconnect';
+    preconnect2.href = 'https://fonts.gstatic.com';
+    preconnect2.crossOrigin = 'anonymous';
+    preconnect2.id = 'moat-google-fonts-preconnect-2';
+
+    // Create the main font stylesheet link
+    const fontLink = document.createElement('link');
+    fontLink.id = 'moat-google-fonts';
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap';
+
+    // Inject all links into head
+    const head = document.head || document.getElementsByTagName('head')[0];
+    if (head) {
+      head.appendChild(preconnect1);
+      head.appendChild(preconnect2);
+      head.appendChild(fontLink);
+      console.log('✅ Moat: Google Fonts injected successfully');
+    } else {
+      console.warn('⚠️ Moat: Could not find document head to inject fonts');
+    }
+  }
+
+  // Inject fonts immediately when content script loads
+  injectGoogleFonts();
+
   // Import utility modules (added for Task 2.1)
   let taskStore = null;
   let markdownGenerator = null;
