@@ -23,11 +23,11 @@
       name: 'rectangle',
       cursor: 'crosshair',
       draw: function(ctx, x, y, width, height) {
-        ctx.strokeStyle = '#3B82F6';
+        ctx.strokeStyle = '#F59E0B';
         ctx.lineWidth = 2;
         ctx.setLineDash([]);
         ctx.strokeRect(x, y, width, height);
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.1)';
         ctx.fillRect(x, y, width, height);
       }
     }
@@ -384,6 +384,77 @@
       console.error('Moat: Failed to save screenshot:', error);
       return '';
     }
+  }
+
+  /**
+   * Capture screenshot using Chrome's native API and crop to specified region
+   * @param {Object} captureArea - { x, y, width, height } in viewport/CSS pixels
+   * @param {number} padding - Padding already included in captureArea (for metadata)
+   * @returns {Promise<{dataUrl: string, viewport: Object}|null>}
+   */
+  async function captureScreenshotNative(captureArea, padding = 100) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: 'CAPTURE_SCREENSHOT' }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Screenshot message failed:', chrome.runtime.lastError);
+          resolve(null);
+          return;
+        }
+        
+        if (!response?.success || !response?.dataUrl) {
+          console.warn('Native screenshot capture failed:', response?.error);
+          resolve(null);
+          return;
+        }
+
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const scale = window.devicePixelRatio || 1;
+
+            // Calculate crop coordinates (captureArea is in CSS pixels, image is in device pixels)
+            const cropX = Math.max(0, Math.round(captureArea.x * scale));
+            const cropY = Math.max(0, Math.round(captureArea.y * scale));
+            const cropW = Math.min(Math.round(captureArea.width * scale), img.width - cropX);
+            const cropH = Math.min(Math.round(captureArea.height * scale), img.height - cropY);
+
+            if (cropW <= 0 || cropH <= 0) {
+              console.warn('Invalid crop dimensions');
+              resolve(null);
+              return;
+            }
+
+            canvas.width = cropW;
+            canvas.height = cropH;
+
+            ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+            resolve({
+              dataUrl: canvas.toDataURL('image/png'),
+              viewport: {
+                x: captureArea.x,
+                y: captureArea.y,
+                width: captureArea.width,
+                height: captureArea.height,
+                padding: padding
+              }
+            });
+          } catch (e) {
+            console.error('Screenshot crop failed:', e);
+            resolve(null);
+          }
+        };
+
+        img.onerror = () => {
+          console.error('Failed to load screenshot image');
+          resolve(null);
+        };
+
+        img.src = response.dataUrl;
+      });
+    });
   }
 
   // New annotation save pipeline using TaskStore and MarkdownGenerator (Tasks 2.2-2.8)
@@ -3014,50 +3085,34 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Capture screenshot with the highlight visible
     let screenshotData = null;
-    if (window.html2canvas) {
-      try {
-        const rect = element.getBoundingClientRect();
-        const padding = 100;
-        const elementDocX = rect.x + window.scrollX;
-        const elementDocY = rect.y + window.scrollY;
-        
-        const captureX = Math.max(0, elementDocX - padding);
-        const captureY = Math.max(0, elementDocY - padding);
-        const captureWidth = rect.width + (padding * 2);
-        const captureHeight = rect.height + (padding * 2);
-        
-        console.log('📸 Capturing with overlay at:', {
-          overlayPos: { x: elementDocX, y: elementDocY, w: rect.width, h: rect.height },
-          captureArea: { x: captureX, y: captureY, w: captureWidth, h: captureHeight }
-        });
-        
-        // Capture what the user sees (with highlight overlay)
-        const canvas = await html2canvas(document.body, {
-          backgroundColor: null,
-          scale: Math.min(window.devicePixelRatio || 1, 2),
-          logging: false,
-          x: captureX,
-          y: captureY,
-          width: captureWidth,
-          height: captureHeight,
-          useCORS: true,
-          allowTaint: false
-        });
-        
-        screenshotData = {
-          dataUrl: canvas.toDataURL('image/png'),
-          viewport: {
-            x: captureX,
-            y: captureY,
-            width: captureWidth,
-            height: captureHeight,
-            padding: padding
-          }
-        };
-        console.log('✅ Screenshot captured with overlay');
-      } catch (e) {
-        console.warn('Screenshot capture failed:', e);
+    try {
+      const rect = element.getBoundingClientRect();
+      const padding = 100;
+      
+      // Calculate capture area in viewport coordinates
+      const captureX = Math.max(0, rect.x - padding);
+      const captureY = Math.max(0, rect.y - padding);
+      const captureWidth = Math.min(rect.width + (padding * 2), window.innerWidth - captureX);
+      const captureHeight = Math.min(rect.height + (padding * 2), window.innerHeight - captureY);
+      
+      console.log('📸 Capturing element screenshot at:', {
+        element: element.tagName,
+        rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+        captureArea: { x: captureX, y: captureY, w: captureWidth, h: captureHeight }
+      });
+      
+      screenshotData = await captureScreenshotNative({
+        x: captureX,
+        y: captureY,
+        width: captureWidth,
+        height: captureHeight
+      }, padding);
+      
+      if (screenshotData) {
+        console.log('✅ Screenshot captured successfully');
       }
+    } catch (e) {
+      console.warn('Screenshot capture failed:', e);
     }
     
     // Keep the DOM overlay visible while user is commenting
@@ -3371,64 +3426,42 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Capture screenshot with rectangle drawn on canvas
     let screenshotData = null;
-    if (window.html2canvas && drawingCanvas) {
-      try {
-        // Draw final rectangle on canvas before capture (ensure it's visible)
-        if (drawingCtx && drawingTool) {
-          const tool = drawingTools[drawingTool];
-          if (tool && tool.draw) {
-            tool.draw(drawingCtx, rectangleData.x, rectangleData.y, rectangleData.width, rectangleData.height);
-          }
+    try {
+      // Draw final rectangle on canvas before capture (ensure it's visible)
+      if (drawingCtx && drawingTool) {
+        const tool = drawingTools[drawingTool];
+        if (tool && tool.draw) {
+          tool.draw(drawingCtx, rectangleData.x, rectangleData.y, rectangleData.width, rectangleData.height);
         }
-        
-        // Wait a moment for canvas to render
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // Calculate capture area around rectangle with padding
-        // rectangleData coordinates are viewport-relative (clientX/Y)
-        // html2canvas x/y are document-relative, so we need to add scroll position
-        const padding = 100;
-        const docX = rectangleData.x + window.scrollX;
-        const docY = rectangleData.y + window.scrollY;
-        const captureX = Math.max(0, docX - padding);
-        const captureY = Math.max(0, docY - padding);
-        const captureWidth = rectangleData.width + (padding * 2);
-        const captureHeight = rectangleData.height + (padding * 2);
-        
-        console.log('📸 Capturing screenshot with rectangle at:', {
-          rect: rectangleData,
-          docCoords: { x: docX, y: docY },
-          captureArea: { x: captureX, y: captureY, w: captureWidth, h: captureHeight }
-        });
-        
-        // Capture screenshot including the canvas overlay
-        // The canvas overlay is fixed position, so it will be captured correctly
-        const canvas = await html2canvas(document.body, {
-          backgroundColor: null,
-          scale: Math.min(window.devicePixelRatio || 1, 2),
-          logging: false,
-          x: captureX,
-          y: captureY,
-          width: captureWidth,
-          height: captureHeight,
-          useCORS: true,
-          allowTaint: false
-        });
-        
-        screenshotData = {
-          dataUrl: canvas.toDataURL('image/png'),
-          viewport: {
-            x: captureX,
-            y: captureY,
-            width: captureWidth,
-            height: captureHeight,
-            padding: padding
-          }
-        };
-        console.log('✅ Screenshot captured with rectangle');
-      } catch (e) {
-        console.warn('Screenshot capture failed:', e);
       }
+      
+      // Brief delay to ensure canvas is rendered before capture
+      await new Promise(resolve => setTimeout(resolve, 16));
+      
+      // Calculate capture area in viewport coordinates
+      const padding = 100;
+      const captureX = Math.max(0, rectangleData.x - padding);
+      const captureY = Math.max(0, rectangleData.y - padding);
+      const captureWidth = Math.min(rectangleData.width + (padding * 2), window.innerWidth - captureX);
+      const captureHeight = Math.min(rectangleData.height + (padding * 2), window.innerHeight - captureY);
+      
+      console.log('📸 Capturing rectangle screenshot at:', {
+        rect: rectangleData,
+        captureArea: { x: captureX, y: captureY, w: captureWidth, h: captureHeight }
+      });
+      
+      screenshotData = await captureScreenshotNative({
+        x: captureX,
+        y: captureY,
+        width: captureWidth,
+        height: captureHeight
+      }, padding);
+      
+      if (screenshotData) {
+        console.log('✅ Screenshot captured with rectangle');
+      }
+    } catch (e) {
+      console.warn('Screenshot capture failed:', e);
     }
     
     // Create comment box
@@ -4160,18 +4193,18 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       console.log('📸 === SCREENSHOT SYSTEM DIAGNOSIS ===');
       
       const diagnosis = {
-        html2canvasAvailable: !!window.html2canvas,
-        html2canvasVersion: window.html2canvas?.version || 'unknown',
+        nativeCaptureAvailable: !!chrome?.runtime?.sendMessage,
+        captureMethod: 'captureVisibleTab',
         screenshotsDirectoryExists: false,
         canCaptureScreenshots: false,
         recommendations: []
       };
       
-      // Check html2canvas availability
-      if (!diagnosis.html2canvasAvailable) {
-        diagnosis.recommendations.push('❌ html2canvas library not loaded - check manifest.json script order');
+      // Check native capture availability
+      if (!diagnosis.nativeCaptureAvailable) {
+        diagnosis.recommendations.push('❌ Chrome runtime not available for screenshots');
       } else {
-        diagnosis.recommendations.push('✅ html2canvas library loaded successfully');
+        diagnosis.recommendations.push('✅ Native screenshot capture available');
       }
       
       // Check screenshots directory
@@ -4188,7 +4221,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       }
       
       // Overall capability
-      diagnosis.canCaptureScreenshots = diagnosis.html2canvasAvailable && !!window.directoryHandle;
+      diagnosis.canCaptureScreenshots = diagnosis.nativeCaptureAvailable && !!window.directoryHandle;
       
       if (diagnosis.canCaptureScreenshots) {
         diagnosis.recommendations.push('🎉 Screenshot system is ready!');
