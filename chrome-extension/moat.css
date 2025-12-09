@@ -1779,14 +1779,17 @@ body.float-drawing-mode * {
 .float-moat.float-moat-right .float-moat-new-comment-container {
   /* Spacing handled by parent gap */
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .float-moat.float-moat-right .float-moat-tools-dropdown {
   max-width: 60px;
+  min-width: 32px; /* Ensure button is always visible with icon */
   padding: 4px 8px;
   height: 28px;
   font-size: 11px;
   gap: 4px;
+  flex-shrink: 0; /* Prevent button from shrinking */
 }
 
 .float-moat.float-moat-right .float-tools-text {
@@ -1811,14 +1814,17 @@ body.float-drawing-mode * {
 .float-moat.float-moat-left .float-moat-new-comment-container {
   /* Spacing handled by parent gap */
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .float-moat.float-moat-left .float-moat-tools-dropdown {
   max-width: 60px;
+  min-width: 32px; /* Ensure button is always visible with icon */
   padding: 4px 8px;
   height: 28px;
   font-size: 11px;
   gap: 4px;
+  flex-shrink: 0; /* Prevent button from shrinking */
 }
 
 .float-moat.float-moat-left .float-tools-text {
