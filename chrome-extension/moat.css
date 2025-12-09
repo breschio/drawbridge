@@ -1,7 +1,8 @@
 /* Google Fonts are loaded via JavaScript injection in content_script.js for reliability */
 
 /* Theme System - CSS Custom Properties */
-:root {
+:root,
+#moat-moat {
   /* Light Theme (Default) */
   --moat-bg-primary: #ffffff;
   --moat-bg-secondary: #f9fafb;
@@ -36,7 +37,8 @@
 }
 
 /* Dark Theme */
-[data-moat-theme="dark"] {
+:root[data-moat-theme="dark"],
+:root[data-moat-theme="dark"] #moat-moat {
   --moat-bg-primary: #111827;
   --moat-bg-secondary: #1f2937;
   --moat-bg-tertiary: #374151;
