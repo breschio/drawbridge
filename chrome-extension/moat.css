@@ -1840,9 +1840,6 @@ body.float-drawing-mode * {
 }
 
 /* Compact styling for left position (same as right) */
-.float-moat.float-moat-left .float-moat-new-comment-container {
-  /* Spacing handled by parent gap */
-}
 
 /* New Project Dropdown Styling */
 .float-moat-project-status-container {
