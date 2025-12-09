@@ -565,11 +565,14 @@ body.float-drawing-mode * {
   gap: 8px;
   flex: 1;
   justify-content: flex-end;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Compact project status for right position */
 .float-moat.float-moat-right .float-moat-project-status-container {
   max-width: 120px;
+  flex-shrink: 0;
 }
 
 .float-moat.float-moat-right .float-moat-project-dropdown {
@@ -596,6 +599,7 @@ body.float-drawing-mode * {
 /* Compact action buttons for right position */  
 .float-moat.float-moat-right .float-moat-actions {
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .float-moat.float-moat-right .float-moat-actions button {
@@ -658,11 +662,14 @@ body.float-drawing-mode * {
   gap: 8px;
   flex: 1;
   justify-content: flex-end;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Compact project status for left position */
 .float-moat.float-moat-left .float-moat-project-status-container {
   max-width: 120px;
+  flex-shrink: 0;
 }
 
 .float-moat.float-moat-left .float-moat-project-dropdown {
@@ -689,6 +696,7 @@ body.float-drawing-mode * {
 /* Compact action buttons for left position */  
 .float-moat.float-moat-left .float-moat-actions {
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .float-moat.float-moat-left .float-moat-actions button {
@@ -1770,6 +1778,7 @@ body.float-drawing-mode * {
 /* Compact styling for right position */
 .float-moat.float-moat-right .float-moat-new-comment-container {
   /* Spacing handled by parent gap */
+  flex-shrink: 0;
 }
 
 .float-moat.float-moat-right .float-moat-tools-dropdown {
@@ -1799,6 +1808,11 @@ body.float-drawing-mode * {
 }
 
 /* Left position - Compact top bar layout (mirrors right position) */
+.float-moat.float-moat-left .float-moat-new-comment-container {
+  /* Spacing handled by parent gap */
+  flex-shrink: 0;
+}
+
 .float-moat.float-moat-left .float-moat-tools-dropdown {
   max-width: 60px;
   padding: 4px 8px;
