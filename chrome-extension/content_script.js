@@ -76,8 +76,8 @@
     }
   }
 
-  // Inject fonts immediately when content script loads
-  injectGoogleFonts();
+  // Fonts will be injected lazily when moat is created (in moat.js)
+  // injectGoogleFonts(); // Moved to moat.js for lazy loading
 
   // Import utility modules (added for Task 2.1)
   let taskStore = null;
