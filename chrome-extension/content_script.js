@@ -601,9 +601,9 @@
     // Initialize utility modules (Task 2.1)
     initializeUtilitiesWithRetry();
     
-    // Initialize queue if not exists
-    if (!localStorage.getItem('moat.queue')) {
-      localStorage.setItem('moat.queue', JSON.stringify([]));
+    // Initialize queue if not exists (using safe storage wrapper)
+    if (window.MoatSafeStorage && !window.MoatSafeStorage.getItem('moat.queue')) {
+      window.MoatSafeStorage.setJSON('moat.queue', []);
     }
     
     // Show success message
@@ -4127,8 +4127,8 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   // Task 4.10: Export debugging functions for manual testing
   window.moatDebug = {
     exportAnnotations,
-    getQueue: () => JSON.parse(localStorage.getItem('moat.queue') || '[]'),
-    clearQueue: () => localStorage.removeItem('moat.queue'),
+    getQueue: () => window.MoatSafeStorage ? window.MoatSafeStorage.getJSON('moat.queue', []) : [],
+    clearQueue: () => window.MoatSafeStorage && window.MoatSafeStorage.removeItem('moat.queue'),
     testAnnotationCaptureFlow,
     runEndToEndTest: runEndToEndTestWhenReady,
     // Migration debugging functions
@@ -4339,13 +4339,16 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     }
   };
 
-  // Listen for messages from popup
+  // Listen for messages from background script (extension icon click)
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'toggleMoat') {
+    if (request.action === 'ping') {
+      // Simple ping to check if content script is ready
+      sendResponse({ success: true, ready: true });
+    } else if (request.action === 'toggleMoat') {
       window.dispatchEvent(new CustomEvent('moat:toggle-moat'));
       sendResponse({ success: true });
     } else if (request.action === 'getQueueStatus') {
-      const queue = JSON.parse(localStorage.getItem('moat.queue') || '[]');
+      const queue = window.MoatSafeStorage ? window.MoatSafeStorage.getJSON('moat.queue', []) : [];
       sendResponse({ 
         count: queue.length,
         protocol: 'file',

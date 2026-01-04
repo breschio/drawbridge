@@ -10,8 +10,8 @@
 ```
 Chrome Extension (chrome-extension/)
 ├── manifest.json          # Extension configuration
-├── content_script.js      # Main logic (injected into every localhost page)
-├── popup.js              # Extension popup interface
+├── background.js          # Extension icon click handler
+├── content_script.js      # Main logic (injected into every page)
 ├── moat.js               # UI sidebar and visual components
 └── utils/
     ├── taskStore.js      # Task data management
@@ -63,7 +63,7 @@ User Project Directory (ANY name)
 **Connection Preserved During**:
 - Page refreshes
 - Tab switching
-- Extension popup usage
+- Extension icon clicks
 
 ### **Reconnection Process**
 1. **Detection**: Extension detects missing directory handle

@@ -156,7 +156,7 @@ Use @moat-auto-fix.md for immediate implementation
 - `content_script.js` - Main annotation logic
 - `moat.js` - Sidebar component
 - `moat.css` - All styles
-- `popup.html/js` - Extension popup UI
+- `background.js` - Extension icon click handler
 - `html2canvas.min.js` - Screenshot capture library
 
 ## 🔧 Features
@@ -282,7 +282,7 @@ No action required! Check the console for `✅ Migration completed successfully!
 ### **🛠 How to Reconnect**
 
 1. **Quick Reconnect**: Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows)
-2. **Via Popup**: Click the Moat extension icon
+2. **Via Extension Icon**: Click the Drawbridge extension icon
 3. **Console**: Run `setupProject()` in browser console
 
 ### **✅ Connection Status Check**
