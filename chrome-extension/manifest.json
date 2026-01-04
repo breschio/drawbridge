@@ -22,6 +22,7 @@
       "matches": ["<all_urls>"],
       "js": [
         "html2canvas.min.js",
+        "utils/safeStorage.js",
         "utils/persistence.js",
         "utils/taskStore.js",
         "utils/markdownGenerator.js",
@@ -34,7 +35,6 @@
     }
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Drawbridge",
     "default_icon": {
       "16": "icons/drawbridge-icon-light-16.png",
