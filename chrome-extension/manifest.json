@@ -4,7 +4,8 @@
   "version": "1.1.0",
   "description": "Visual feedback tool: Annotate browser pages and send UI feedback to Cursor/Claude Code as AI prompts",
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -32,7 +33,6 @@
     }
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Drawbridge",
     "default_icon": {
       "16": "icons/drawbridge-icon-light-16.png",

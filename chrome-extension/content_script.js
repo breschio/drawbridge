@@ -4339,8 +4339,14 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     }
   };
 
-  // Listen for messages from popup
+  // Listen for messages from popup and background
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Ping handler to check if content scripts are loaded
+    if (request.action === 'ping') {
+      sendResponse({ pong: true });
+      return true;
+    }
+    
     if (request.action === 'toggleMoat') {
       window.dispatchEvent(new CustomEvent('moat:toggle-moat'));
       sendResponse({ success: true });

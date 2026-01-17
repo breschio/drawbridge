@@ -532,10 +532,11 @@ body.float-drawing-mode * {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
+  padding: 12px 16px; /* Even padding for vertical centering */
   background: var(--moat-bg-secondary);
   border-bottom: 1px solid var(--moat-border);
   gap: 12px;
+  overflow: visible;
 }
 
 .float-moat.float-moat-right .float-moat-header {
@@ -568,7 +569,7 @@ body.float-drawing-mode * {
   flex: 1;
   justify-content: flex-end;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Compact project status for right position */
@@ -629,10 +630,11 @@ body.float-drawing-mode * {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
+  padding: 12px 16px; /* Even padding for vertical centering */
   background: var(--moat-bg-secondary);
   border-bottom: 1px solid var(--moat-border);
   gap: 12px;
+  overflow: visible;
 }
 
 .float-moat.float-moat-left .float-moat-header {
@@ -665,7 +667,7 @@ body.float-drawing-mode * {
   flex: 1;
   justify-content: flex-end;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Compact project status for left position */
@@ -744,11 +746,12 @@ body.float-drawing-mode * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 12px 16px; /* Even padding for vertical centering */
   background: var(--moat-bg-secondary);
   border-bottom: 1px solid var(--moat-border);
   flex-shrink: 0;
   position: relative;
+  overflow: visible;
 }
 
 .float-moat.float-moat-bottom .float-moat-header {
@@ -771,6 +774,7 @@ body.float-drawing-mode * {
   align-items: baseline;
   gap: 8px;
   line-height: 1;
+  text-transform: none !important; /* Prevent inheritance from host page */
 }
 
 .float-moat.float-moat-bottom .float-moat-right-controls {
@@ -779,7 +783,7 @@ body.float-drawing-mode * {
   gap: 8px;
   min-width: 0;
   max-width: calc(50% - 120px); /* Ensure space for centered tabs */
-  overflow: hidden;
+  overflow: visible;
 }
 
 .float-moat.float-moat-bottom .float-moat-project-status {
@@ -1020,6 +1024,7 @@ body.float-drawing-mode * {
   align-items: baseline;
   gap: 8px;
   line-height: 1;
+  text-transform: none !important; /* Prevent inheritance from host page */
 }
 
 .float-moat-actions {
@@ -1866,6 +1871,7 @@ body.float-drawing-mode * {
   cursor: pointer;
   transition: all 0.2s;
   font-size: 12px;
+  font-weight: 500; /* Match Tools button text weight */
   font-family: inherit;
   color: var(--moat-text-tertiary);
   box-shadow: 0 1px 2px var(--moat-shadow);
