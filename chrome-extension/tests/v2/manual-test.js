@@ -135,80 +135,113 @@ async function run() {
     }
 
     // === TEST 3: Navigate to demo site, content script injected ===
+    // NOTE: Content scripts run in Chrome's isolated world — window.* globals
+    // they set are NOT visible from page.evaluate() (main world). Instead we
+    // detect DOM side effects: the content script injects Google Fonts <link>
+    // elements with known IDs into the shared DOM.
     const page = await browser.newPage();
     try {
       await page.goto('http://localhost:3456', { waitUntil: 'networkidle2', timeout: 15000 });
-      
-      // Wait for content script to initialize
+
+      // Wait for content script to inject its DOM markers
       await page.waitForFunction(() => {
-        return typeof window.moatDebug !== 'undefined' || 
-               typeof window.taskStore !== 'undefined' ||
-               typeof window.MoatSafeStorage !== 'undefined';
+        return !!document.getElementById('moat-google-fonts') ||
+               !!document.getElementById('moat-google-fonts-preconnect-1');
       }, { timeout: 5000 }).catch(() => null);
-      
-      // Check if content script globals exist
+
+      // Check for DOM elements the content script creates
       const contentScriptLoaded = await page.evaluate(() => {
         return {
-          safeStorage: typeof window.MoatSafeStorage !== 'undefined',
-          taskStore: typeof window.MoatTaskStore !== 'undefined',
-          markdownGen: typeof window.MoatMarkdownGenerator !== 'undefined',
-          persistence: typeof window.MoatPersistence !== 'undefined' || typeof window.moatPersistence !== 'undefined'
+          googleFonts: !!document.getElementById('moat-google-fonts'),
+          preconnect1: !!document.getElementById('moat-google-fonts-preconnect-1'),
+          preconnect2: !!document.getElementById('moat-google-fonts-preconnect-2')
         };
       });
-      
-      const allLoaded = Object.values(contentScriptLoaded).every(v => v);
-      if (allLoaded) {
+
+      const injected = contentScriptLoaded.googleFonts || contentScriptLoaded.preconnect1;
+      if (injected) {
         log('PASS', 'T03: Content script injected on demo site', JSON.stringify(contentScriptLoaded));
       } else {
-        log('WARN', 'T03: Content script partially loaded', JSON.stringify(contentScriptLoaded));
+        log('FAIL', 'T03: Content script not detected', JSON.stringify(contentScriptLoaded));
       }
     } catch (e) {
       log('FAIL', 'T03: Content script injected on demo site', e.message);
     }
 
-    // === TEST 4: Content script responds to ping ===
+    // === TEST 4: Content script initialized and modified DOM ===
+    // NOTE: chrome.runtime is only available in the content script's isolated
+    // world, not the main world. Instead, verify the content script ran by
+    // checking its DOM side-effects and extension-injected stylesheets.
     try {
-      const pingResult = await page.evaluate(() => {
-        return new Promise((resolve) => {
-          chrome.runtime.sendMessage({ action: 'ping' }, (response) => {
-            resolve(response);
-          });
-        });
-      }).catch(() => null);
-      
-      // Content scripts can't send messages to themselves this way.
-      // Instead, check if the message listener is set up
-      const hasListener = await page.evaluate(() => {
-        // Check if the content script registered its listener
-        return typeof chrome !== 'undefined' && 
-               typeof chrome.runtime !== 'undefined' &&
-               typeof chrome.runtime.onMessage !== 'undefined';
+      const csInitialized = await page.evaluate(() => {
+        const hasGoogleFonts = !!document.getElementById('moat-google-fonts');
+
+        // Extension-injected CSS creates anonymous stylesheets (no href)
+        const sheets = Array.from(document.styleSheets);
+        let injectedSheetCount = 0;
+        for (const sheet of sheets) {
+          try {
+            if (!sheet.href && sheet.cssRules?.length > 0) injectedSheetCount++;
+          } catch (e) { /* cross-origin */ }
+        }
+
+        return {
+          googleFonts: hasGoogleFonts,
+          injectedStylesheets: injectedSheetCount
+        };
       });
-      
-      if (hasListener) {
-        log('PASS', 'T04: Chrome runtime available in content script');
+
+      if (csInitialized.googleFonts) {
+        log('PASS', 'T04: Content script initialized and modified DOM', JSON.stringify(csInitialized));
       } else {
-        log('FAIL', 'T04: Chrome runtime available in content script');
+        log('FAIL', 'T04: Content script DOM modifications not detected', JSON.stringify(csInitialized));
       }
     } catch (e) {
-      log('FAIL', 'T04: Chrome runtime available in content script', e.message);
+      log('FAIL', 'T04: Content script check', e.message);
     }
 
     // === TEST 5: Content CSS injected (not moat.css) ===
+    // NOTE: Extension-injected CSS (via manifest content_scripts.css) creates
+    // anonymous stylesheets with no href. Check for known CSS rules instead.
     try {
       const cssCheck = await page.evaluate(() => {
         const sheets = Array.from(document.styleSheets);
-        const hasContentCss = sheets.some(s => s.href && s.href.includes('content.css'));
         const hasMoatCss = sheets.some(s => s.href && s.href.includes('moat.css'));
-        return { hasContentCss, hasMoatCss, sheetCount: sheets.length };
+
+        // content.css defines rules for .float-comment-mode, .float-highlight, etc.
+        // Extension-injected CSS has no href, so scan rules in anonymous sheets.
+        let hasContentCssRules = false;
+        for (const sheet of sheets) {
+          try {
+            if (sheet.href) continue; // Skip linked sheets — we want injected ones
+            const rules = Array.from(sheet.cssRules || []);
+            const hasFloatRule = rules.some(r =>
+              r.selectorText && (
+                r.selectorText.includes('.float-comment-mode') ||
+                r.selectorText.includes('.float-highlight') ||
+                r.selectorText.includes('.float-drawing-canvas')
+              )
+            );
+            if (hasFloatRule) {
+              hasContentCssRules = true;
+              break;
+            }
+          } catch (e) {
+            // Cross-origin stylesheet — skip
+          }
+        }
+
+        return { hasContentCssRules, hasMoatCss, sheetCount: sheets.length };
       });
-      
-      if (cssCheck.hasContentCss && !cssCheck.hasMoatCss) {
-        log('PASS', 'T05: V2 content.css injected, moat.css removed');
-      } else if (!cssCheck.hasMoatCss) {
-        log('PASS', 'T05: moat.css not injected (V1 removed)', JSON.stringify(cssCheck));
+
+      if (cssCheck.hasContentCssRules && !cssCheck.hasMoatCss) {
+        log('PASS', 'T05: V2 content.css rules injected, moat.css removed');
+      } else if (!cssCheck.hasMoatCss && !cssCheck.hasContentCssRules) {
+        log('WARN', 'T05: No moat.css (V1 removed) but content.css rules not detected', JSON.stringify(cssCheck));
+      } else if (cssCheck.hasMoatCss) {
+        log('FAIL', 'T05: V1 moat.css still present', JSON.stringify(cssCheck));
       } else {
-        log('FAIL', 'T05: CSS injection check', JSON.stringify(cssCheck));
+        log('PASS', 'T05: V2 content.css rules injected', JSON.stringify(cssCheck));
       }
     } catch (e) {
       log('FAIL', 'T05: CSS injection check', e.message);
