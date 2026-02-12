@@ -144,5 +144,39 @@ const testFiles = [
   }
 
   console.log('='.repeat(60));
+
+  // Save results to file
+  const fs = require('fs');
+  const pathMod = require('path');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  let commit = 'unknown';
+  try {
+    commit = require('child_process').execSync('git rev-parse --short HEAD', { cwd: pathMod.resolve(__dirname, '../../../') }).toString().trim();
+  } catch(e) {}
+  const resultsDir = pathMod.resolve(__dirname, 'results');
+  if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true });
+  const resultsFile = pathMod.join(resultsDir, `unit-${timestamp}-${commit}.md`);
+
+  let md = `# Unit Test Results\n\n`;
+  md += `- **Date:** ${new Date().toISOString()}\n`;
+  md += `- **Commit:** ${commit}\n`;
+  md += `- **Branch:** v2\n`;
+  md += `- **Total:** ${totalTests} | **Passed:** ${totalPassed} | **Failed:** ${totalFailed} | **Skipped:** ${totalSkipped}\n`;
+  md += `- **Pass Rate:** ${passRate}%\n\n`;
+
+  if (allFailures.length > 0) {
+    md += `## Failures\n\n`;
+    md += `| File | Suite | Test | Error |\n`;
+    md += `|------|-------|------|-------|\n`;
+    allFailures.forEach(({ file, suite, test, error }) => {
+      md += `| ${file} | ${suite} | ${test} | ${error.message.replace(/\|/g, '\\|')} |\n`;
+    });
+  } else {
+    md += `## ✅ All tests passed!\n`;
+  }
+
+  fs.writeFileSync(resultsFile, md);
+  console.log(`\n📄 Results saved: ${resultsFile}`);
+
   process.exit(totalFailed > 0 ? 1 : 0);
 })();
