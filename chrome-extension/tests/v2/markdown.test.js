@@ -22,8 +22,7 @@ describe('JTBD-57: System generates markdown from task array', () => {
 
   it('should generate valid markdown structure', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const tasks = [
@@ -46,8 +45,7 @@ describe('JTBD-57: System generates markdown from task array', () => {
 
   it('should handle empty task array', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const markdown = window.MoatMarkdownGenerator.generateMarkdownFromTasks([]);
@@ -71,8 +69,7 @@ describe('JTBD-60: System displays task summary statistics', () => {
 
   it('should calculate and display task statistics', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const tasks = [
@@ -103,8 +100,7 @@ describe('JTBD-61: System converts status to checkbox format', () => {
 
   it('should convert statuses to correct checkbox format', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     expect(window.MoatMarkdownGenerator.statusToCheckbox('to do')).toBe('[ ]');
@@ -126,8 +122,7 @@ describe('JTBD-62: System truncates long comments in markdown', () => {
 
   it('should truncate comments longer than 60 characters', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const longComment = 'This is a very long comment that should definitely be truncated because it exceeds the maximum length';
@@ -139,8 +134,7 @@ describe('JTBD-62: System truncates long comments in markdown', () => {
 
   it('should not truncate short comments', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const shortComment = 'Short comment';
@@ -164,8 +158,7 @@ describe('JTBD-63: System numbers tasks sequentially', () => {
 
   it('should number tasks starting from 1', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const tasks = [
@@ -195,8 +188,7 @@ describe('JTBD-64: System includes timestamp in markdown footer', () => {
 
   it('should include generation timestamp', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const tasks = [];
@@ -220,8 +212,7 @@ describe('JTBD-66: System sorts tasks chronologically in markdown', () => {
 
   it('should sort tasks by timestamp (oldest first)', () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const tasks = [
@@ -255,8 +246,7 @@ describe('JTBD-58: System writes markdown to file', () => {
 
   it('should write markdown content to file', async () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
@@ -288,8 +278,7 @@ describe('JTBD-59: System rebuilds markdown file completely', () => {
 
   it('should rebuild markdown file from task array', async () => {
     if (!window.MoatMarkdownGenerator) {
-      console.log('⏭️  MarkdownGenerator not available, skipping test');
-      return;
+      throw new Error('MarkdownGenerator module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();

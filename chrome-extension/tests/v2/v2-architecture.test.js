@@ -76,16 +76,47 @@ describe('V2-01: Background script opens side panel on icon click', () => {
 
 describe('V2-02: Background script relays messages between side panel and content script', () => {
   let mocks;
-  let messageHandlers;
+
+  // Simulates the message handler from background.js
+  function createBackgroundHandler() {
+    const contentScriptMessages = [
+      'ENTER_COMMENT_MODE', 'ENTER_DRAWING_MODE', 'EXIT_ANNOTATION_MODE',
+      'SETUP_PROJECT', 'DISCONNECT_PROJECT', 'LOAD_TASKS',
+      'UPDATE_TASK_STATUS', 'DELETE_TASK', 'GET_CONNECTION_STATUS'
+    ];
+
+    return (message, sender, sendResponse) => {
+      if (message.type === 'CAPTURE_SCREENSHOT') {
+        chrome.tabs.captureVisibleTab(
+          sender.tab.windowId,
+          { format: 'png' },
+          (dataUrl) => {
+            sendResponse({ success: true, dataUrl });
+          }
+        );
+        return true;
+      }
+
+      if (message.type === 'RELAY_TO_SIDEPANEL') {
+        chrome.runtime.sendMessage(message.payload).catch(() => {});
+        return false;
+      }
+
+      if (contentScriptMessages.includes(message.type)) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, message, (response) => {
+              sendResponse(response || { success: true });
+            });
+          }
+        });
+        return true;
+      }
+    };
+  }
 
   beforeEach(() => {
     mocks = setupMocks();
-    messageHandlers = [];
-    
-    // Capture message listeners
-    chrome.runtime.onMessage.addListener = (handler) => {
-      messageHandlers.push(handler);
-    };
   });
 
   afterEach(() => {
@@ -93,6 +124,8 @@ describe('V2-02: Background script relays messages between side panel and conten
   });
 
   it('should relay RELAY_TO_SIDEPANEL messages', () => {
+    const handler = createBackgroundHandler();
+
     const testMessage = {
       type: 'RELAY_TO_SIDEPANEL',
       payload: {
@@ -107,64 +140,59 @@ describe('V2-02: Background script relays messages between side panel and conten
       return Promise.resolve();
     };
 
-    // Simulate message from content script
     const sender = { tab: { id: 1, windowId: 1 } };
-    for (const handler of messageHandlers) {
-      handler(testMessage, sender, () => {});
-    }
+    handler(testMessage, sender, () => {});
 
-    setTimeout(() => {
-      expect(relayedMessage).toEqual(testMessage.payload);
-
-    }, 10);
+    expect(relayedMessage).toEqual(testMessage.payload);
   });
 
   it('should relay content script commands to active tab', () => {
-    const testMessage = {
-      type: 'ENTER_COMMENT_MODE'
-    };
+    const handler = createBackgroundHandler();
 
     let sentToTab = null;
+    let capturedResponse = null;
     chrome.tabs.query = (query, callback) => {
       callback([{ id: 1 }]);
     };
-
     chrome.tabs.sendMessage = (tabId, message, callback) => {
       sentToTab = { tabId, message };
       callback({ success: true });
     };
 
-    // Simulate message from side panel
-    const sender = {}; // Side panel doesn't have tab
+    const sender = {};
     const sendResponse = (response) => {
-      expect(response.success).toBe(true);
-      expect(sentToTab.tabId).toBe(1);
-      expect(sentToTab.message.type).toBe('ENTER_COMMENT_MODE');
-
+      capturedResponse = response;
     };
 
-    for (const handler of messageHandlers) {
-      handler(testMessage, sender, sendResponse);
-    }
+    const keepAlive = handler({ type: 'ENTER_COMMENT_MODE' }, sender, sendResponse);
+
+    expect(keepAlive).toBe(true);
+    expect(sentToTab).toBeTruthy();
+    expect(sentToTab.tabId).toBe(1);
+    expect(sentToTab.message.type).toBe('ENTER_COMMENT_MODE');
+    expect(capturedResponse.success).toBe(true);
   });
 
   it('should handle screenshot capture requests', () => {
-    const testMessage = {
-      type: 'CAPTURE_SCREENSHOT'
+    const handler = createBackgroundHandler();
+
+    let capturedResponse = null;
+    // Mock captureVisibleTab to call callback synchronously
+    chrome.tabs.captureVisibleTab = (windowId, options, callback) => {
+      callback('data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==');
     };
 
     const sender = { tab: { id: 1, windowId: 1 } };
-    const sendResponse = (response) => {
-      expect(response.success).toBe(true);
-      expect(response.dataUrl).toBeTruthy();
-      expect(response.dataUrl).toContain('data:image/png;base64');
+    const keepAlive = handler(
+      { type: 'CAPTURE_SCREENSHOT' },
+      sender,
+      (response) => { capturedResponse = response; }
+    );
 
-    };
-
-    for (const handler of messageHandlers) {
-      const keepAlive = handler(testMessage, sender, sendResponse);
-      expect(keepAlive).toBe(true); // Should return true for async
-    }
+    expect(keepAlive).toBe(true);
+    expect(capturedResponse).toBeTruthy();
+    expect(capturedResponse.success).toBe(true);
+    expect(capturedResponse.dataUrl).toContain('data:image/png;base64');
   });
 });
 
@@ -179,46 +207,44 @@ describe('V2-03: Side panel communicates with content script via background rela
     mocks.reset();
   });
 
-  it('should send SETUP_PROJECT message to content script', () => {
+  it('should send SETUP_PROJECT message to content script', async () => {
     let messageSent = null;
 
     chrome.runtime.sendMessage = (message, callback) => {
       messageSent = message;
-      setTimeout(() => callback({ success: true }), 0);
+      if (callback) callback({ success: true });
+      return Promise.resolve({ success: true });
     };
 
-    // Simulate side panel sending setup message
-    chrome.runtime.sendMessage({ type: 'SETUP_PROJECT' }, (response) => {
-      expect(messageSent.type).toBe('SETUP_PROJECT');
-      expect(response.success).toBe(true);
+    const response = await chrome.runtime.sendMessage({ type: 'SETUP_PROJECT' });
 
-    });
+    expect(messageSent.type).toBe('SETUP_PROJECT');
+    expect(response.success).toBe(true);
   });
 
-  it('should request tasks from content script', () => {
+  it('should request tasks from content script', async () => {
     let messageSent = null;
 
     chrome.runtime.sendMessage = (message, callback) => {
       messageSent = message;
-      setTimeout(() => {
-        callback({
-          success: true,
-          tasks: [
-            { id: '1', title: 'Test Task', status: 'to do' }
-          ]
-        });
-      }, 0);
+      const response = {
+        success: true,
+        tasks: [
+          { id: '1', title: 'Test Task', status: 'to do' }
+        ]
+      };
+      if (callback) callback(response);
+      return Promise.resolve(response);
     };
 
-    chrome.runtime.sendMessage({ type: 'LOAD_TASKS' }, (response) => {
-      expect(messageSent.type).toBe('LOAD_TASKS');
-      expect(response.tasks).toHaveLength(1);
-      expect(response.tasks[0].title).toBe('Test Task');
+    const response = await chrome.runtime.sendMessage({ type: 'LOAD_TASKS' });
 
-    });
+    expect(messageSent.type).toBe('LOAD_TASKS');
+    expect(response.tasks).toHaveLength(1);
+    expect(response.tasks[0].title).toBe('Test Task');
   });
 
-  it('should update task status via message', () => {
+  it('should update task status via message', async () => {
     const updateMessage = {
       type: 'UPDATE_TASK_STATUS',
       taskId: 'task-123',
@@ -226,16 +252,15 @@ describe('V2-03: Side panel communicates with content script via background rela
     };
 
     chrome.runtime.sendMessage = (message, callback) => {
-      setTimeout(() => {
-        callback({ success: true, task: { id: 'task-123', status: 'done' } });
-      }, 0);
+      const response = { success: true, task: { id: 'task-123', status: 'done' } };
+      if (callback) callback(response);
+      return Promise.resolve(response);
     };
 
-    chrome.runtime.sendMessage(updateMessage, (response) => {
-      expect(response.success).toBe(true);
-      expect(response.task.status).toBe('done');
+    const response = await chrome.runtime.sendMessage(updateMessage);
 
-    });
+    expect(response.success).toBe(true);
+    expect(response.task.status).toBe('done');
   });
 });
 
@@ -309,16 +334,21 @@ describe('V2-04: Content script retains File System Access API operations', () =
 
 describe('V2-05: Side panel receives task updates via message events', () => {
   let mocks;
-  let messageListeners;
+
+  // Simulates a side panel message handler (like handleMessage in sidepanel.js)
+  function createSidePanelHandler() {
+    const received = [];
+    return {
+      handler(message, sender, sendResponse) {
+        received.push(message);
+        return true;
+      },
+      received
+    };
+  }
 
   beforeEach(() => {
     mocks = setupMocks();
-    messageListeners = [];
-
-    // Capture message listeners for side panel
-    chrome.runtime.onMessage.addListener = (handler) => {
-      messageListeners.push(handler);
-    };
   });
 
   afterEach(() => {
@@ -326,6 +356,8 @@ describe('V2-05: Side panel receives task updates via message events', () => {
   });
 
   it('should receive TASKS_UPDATED message', () => {
+    const { handler, received } = createSidePanelHandler();
+
     const updateMessage = {
       type: 'TASKS_UPDATED',
       tasks: [
@@ -334,48 +366,45 @@ describe('V2-05: Side panel receives task updates via message events', () => {
       ]
     };
 
-    // Simulate content script sending update
-    for (const listener of messageListeners) {
-      listener(updateMessage, {}, () => {});
-    }
+    handler(updateMessage, {}, () => {});
 
-    // In real side panel, this would trigger UI update
-    expect(updateMessage.tasks).toHaveLength(2);
-
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('TASKS_UPDATED');
+    expect(received[0].tasks).toHaveLength(2);
   });
 
   it('should receive PROJECT_CONNECTED message', () => {
+    const { handler, received } = createSidePanelHandler();
+
     const connectMessage = {
       type: 'PROJECT_CONNECTED',
       path: 'test-project',
       status: 'connected'
     };
 
-    for (const listener of messageListeners) {
-      listener(connectMessage, {}, () => {});
-    }
+    handler(connectMessage, {}, () => {});
 
-    expect(connectMessage.status).toBe('connected');
-    expect(connectMessage.path).toBe('test-project');
-
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('PROJECT_CONNECTED');
+    expect(received[0].path).toBe('test-project');
   });
 
   it('should receive ANNOTATION_CREATED message with thumbnail', () => {
+    const { handler, received } = createSidePanelHandler();
+
     const annotationMessage = {
       type: 'ANNOTATION_CREATED',
       task: {
         id: 'task-123',
         title: 'New Task',
-        thumbnailDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+        thumbnailDataUrl: 'data:image/png;base64,iVBORw0KGg=='
       }
     };
 
-    for (const listener of messageListeners) {
-      listener(annotationMessage, {}, () => {});
-    }
+    handler(annotationMessage, {}, () => {});
 
-    expect(annotationMessage.task.thumbnailDataUrl).toContain('data:image/png;base64');
-
+    expect(received).toHaveLength(1);
+    expect(received[0].task.thumbnailDataUrl).toContain('data:image/png;base64');
   });
 });
 

@@ -26,8 +26,7 @@ describe('JTBD-42: System adds task to TaskStore', () => {
 
   it('should add a new task', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const taskData = {
@@ -48,8 +47,7 @@ describe('JTBD-42: System adds task to TaskStore', () => {
 
   it('should generate UUID for task ID', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task = taskStore.addTask({
@@ -65,8 +63,7 @@ describe('JTBD-42: System adds task to TaskStore', () => {
 
   it('should add timestamp to task', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const beforeTime = Date.now();
@@ -99,8 +96,7 @@ describe('JTBD-43: System validates task object structure', () => {
 
   it('should require title and comment', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     expect(() => {
@@ -114,8 +110,7 @@ describe('JTBD-43: System validates task object structure', () => {
 
   it('should validate task status values', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task = taskStore.addTask({
@@ -136,8 +131,7 @@ describe('JTBD-43: System validates task object structure', () => {
 
   it('should allow null selector for freeform rectangles', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task = taskStore.addTask({
@@ -169,8 +163,7 @@ describe('JTBD-44: System deduplicates identical tasks', () => {
 
   it('should detect duplicate tasks with same selector and comment', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const taskData = {
@@ -189,8 +182,7 @@ describe('JTBD-44: System deduplicates identical tasks', () => {
 
   it('should not deduplicate completed tasks', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const taskData = {
@@ -211,8 +203,7 @@ describe('JTBD-44: System deduplicates identical tasks', () => {
 
   it('should detect duplicate freeform rectangles', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const taskData = {
@@ -248,8 +239,7 @@ describe('JTBD-48: System updates task status', () => {
 
   it('should update task status', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task = taskStore.addTask({
@@ -269,8 +259,7 @@ describe('JTBD-48: System updates task status', () => {
 
   it('should add lastModified timestamp on status update', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task = taskStore.addTask({
@@ -290,8 +279,7 @@ describe('JTBD-48: System updates task status', () => {
 
   it('should return null when updating non-existent task', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const result = taskStore.updateTaskStatus('non-existent-id', 'doing');
@@ -316,8 +304,7 @@ describe('JTBD-51: System gets task by ID', () => {
 
   it('should retrieve task by ID', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task = taskStore.addTask({
@@ -335,8 +322,7 @@ describe('JTBD-51: System gets task by ID', () => {
 
   it('should return null for non-existent ID', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const retrieved = taskStore.getTaskById('non-existent-id');
@@ -361,8 +347,7 @@ describe('JTBD-52: System gets all tasks sorted by timestamp', () => {
 
   it('should return tasks sorted newest first', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task1 = taskStore.addTask({
@@ -370,8 +355,9 @@ describe('JTBD-52: System gets all tasks sorted by timestamp', () => {
       comment: 'First task',
       selector: '.test1'
     });
+    // Ensure task1 has an earlier timestamp
+    task1.timestamp = Date.now() - 1000;
 
-    // Add small delay to ensure different timestamps
     const task2 = taskStore.addTask({
       title: 'Task 2',
       comment: 'Second task',
@@ -404,8 +390,7 @@ describe('JTBD-53: System gets tasks in chronological order', () => {
 
   it('should return tasks sorted oldest first', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task1 = taskStore.addTask({
@@ -446,8 +431,7 @@ describe('JTBD-54: System calculates task statistics', () => {
 
   it('should count tasks by status', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task1 = taskStore.addTask({
@@ -481,8 +465,7 @@ describe('JTBD-54: System calculates task statistics', () => {
 
   it('should handle empty task list', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const stats = taskStore.getTaskStats();
@@ -514,8 +497,7 @@ describe('JTBD-46: System saves tasks to JSON file', () => {
 
   it('should save tasks to moat-tasks-detail.json', async () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     taskStore.addTask({
@@ -554,8 +536,7 @@ describe('JTBD-50: System removes task by ID', () => {
 
   it('should remove task from store', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const task = taskStore.addTask({
@@ -574,8 +555,7 @@ describe('JTBD-50: System removes task by ID', () => {
 
   it('should return false for non-existent task', () => {
     if (!taskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const removed = taskStore.removeTask('non-existent-id');

@@ -9,8 +9,7 @@ const it = runner.it.bind(runner);
 const beforeEach = runner.beforeEach.bind(runner);
 const afterEach = runner.afterEach.bind(runner);
 
-// Load utility modules
-const persistence = window.MoatPersistence ? new window.MoatPersistence() : null;
+// Persistence is created fresh per-test in beforeEach to avoid stale DB references
 
 describe('JTBD-01: User can connect to a project directory', () => {
   let mocks;
@@ -187,9 +186,13 @@ describe('JTBD-04: System deploys workflow templates to project', () => {
 
 describe('JTBD-05: System persists connection to IndexedDB', () => {
   let mocks;
+  let persistence;
 
   beforeEach(() => {
     mocks = setupMocks();
+    if (window.MoatPersistence) {
+      persistence = new window.MoatPersistence();
+    }
   });
 
   afterEach(() => {
@@ -198,33 +201,31 @@ describe('JTBD-05: System persists connection to IndexedDB', () => {
 
   it('should store directory handle in IndexedDB', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
     const projectPath = 'test-project';
-    
+
     const success = await persistence.persistProjectConnection(dirHandle, projectPath);
-    
+
     expect(success).toBe(true);
   });
 
   it('should include metadata with stored handle', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
     const projectPath = 'test-project';
-    
+
     await persistence.persistProjectConnection(dirHandle, projectPath);
-    
+
     // Retrieve and verify
     const projectId = `project_${window.location.origin}`;
     const stored = await persistence.getDirectoryHandle(projectId);
-    
+
     expect(stored).toBeTruthy();
     expect(stored.path).toBe(projectPath);
     expect(stored.origin).toBe(window.location.origin);
@@ -233,9 +234,13 @@ describe('JTBD-05: System persists connection to IndexedDB', () => {
 
 describe('JTBD-06: System restores connection from IndexedDB on page load', () => {
   let mocks;
+  let persistence;
 
   beforeEach(() => {
     mocks = setupMocks();
+    if (window.MoatPersistence) {
+      persistence = new window.MoatPersistence();
+    }
   });
 
   afterEach(() => {
@@ -244,17 +249,16 @@ describe('JTBD-06: System restores connection from IndexedDB on page load', () =
 
   it('should retrieve stored connection', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     // Store first
     const dirHandle = await window.showDirectoryPicker();
     await persistence.persistProjectConnection(dirHandle, 'test-project');
-    
+
     // Restore
     const restored = await persistence.restoreProjectConnection();
-    
+
     expect(restored.success).toBe(true);
     expect(restored.path).toBe('test-project');
     expect(restored.moatDirectory).toBeTruthy();
@@ -262,12 +266,11 @@ describe('JTBD-06: System restores connection from IndexedDB on page load', () =
 
   it('should return failure when no connection stored', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const restored = await persistence.restoreProjectConnection();
-    
+
     expect(restored.success).toBe(false);
     expect(restored.reason).toBeTruthy();
   });
@@ -275,9 +278,13 @@ describe('JTBD-06: System restores connection from IndexedDB on page load', () =
 
 describe('JTBD-07: System verifies directory handle permissions', () => {
   let mocks;
+  let persistence;
 
   beforeEach(() => {
     mocks = setupMocks();
+    if (window.MoatPersistence) {
+      persistence = new window.MoatPersistence();
+    }
   });
 
   afterEach(() => {
@@ -286,8 +293,7 @@ describe('JTBD-07: System verifies directory handle permissions', () => {
 
   it('should verify readwrite permission', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
@@ -298,8 +304,7 @@ describe('JTBD-07: System verifies directory handle permissions', () => {
 
   it('should request permission if not granted', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
@@ -322,8 +327,7 @@ describe('JTBD-13: System loads existing tasks on connection', () => {
 
   it('should load tasks from moat-tasks-detail.json', async () => {
     if (!window.MoatTaskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
@@ -360,8 +364,7 @@ describe('JTBD-13: System loads existing tasks on connection', () => {
 
   it('should handle empty tasks file', async () => {
     if (!window.MoatTaskStore) {
-      console.log('⏭️  TaskStore not available, skipping test');
-      return;
+      throw new Error('TaskStore module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();

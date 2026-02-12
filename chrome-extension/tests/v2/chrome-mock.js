@@ -83,22 +83,26 @@ class ChromeMock {
         data: {},
         get: (keys, callback) => {
           const result = {};
-          if (Array.isArray(keys)) {
+          if (typeof keys === 'string') {
+            if (this.storage.local.data.hasOwnProperty(keys)) {
+              result[keys] = this.storage.local.data[keys];
+            }
+          } else if (Array.isArray(keys)) {
             keys.forEach(key => {
               if (this.storage.local.data.hasOwnProperty(key)) {
                 result[key] = this.storage.local.data[key];
               }
             });
-          } else if (typeof keys === 'string') {
-            if (this.storage.local.data.hasOwnProperty(keys)) {
-              result[keys] = this.storage.local.data[keys];
-            }
           }
-          setTimeout(() => callback(result), 0);
+          if (callback) {
+            setTimeout(() => callback(result), 0);
+          }
+          return Promise.resolve(result);
         },
         set: (items, callback) => {
           Object.assign(this.storage.local.data, items);
           if (callback) setTimeout(callback, 0);
+          return Promise.resolve();
         },
         remove: (keys, callback) => {
           if (Array.isArray(keys)) {
@@ -107,6 +111,7 @@ class ChromeMock {
             delete this.storage.local.data[keys];
           }
           if (callback) setTimeout(callback, 0);
+          return Promise.resolve();
         }
       }
     };
@@ -275,82 +280,82 @@ class IndexedDBMock {
   }
 
   open(name, version) {
-    return {
+    if (!this.databases.has(name)) {
+      this.databases.set(name, { stores: new Map() });
+    }
+    const db = this.databases.get(name);
+    const self = this;
+
+    const dbResult = {
+      name,
+      version,
+      objectStoreNames: {
+        contains: (storeName) => {
+          return db.stores.has(storeName);
+        }
+      },
+      createObjectStore: (storeName, options) => {
+        const store = {
+          name: storeName,
+          data: new Map(),
+          indexes: new Map(),
+          createIndex: (indexName, keyPath, opts) => {
+            store.indexes.set(indexName, { keyPath, options: opts });
+          }
+        };
+        db.stores.set(storeName, store);
+        return store;
+      },
+      transaction: (storeNames, mode) => {
+        return {
+          objectStore: (storeName) => {
+            const store = db.stores.get(storeName);
+
+            const makeRequest = (result) => {
+              const req = { onsuccess: null, onerror: null, result };
+              Promise.resolve().then(() => {
+                if (req.onsuccess) req.onsuccess({ target: req });
+              });
+              return req;
+            };
+
+            return {
+              get: (key) => makeRequest(store?.data.get(key) || undefined),
+              put: (value) => {
+                if (store) store.data.set(value.id, value);
+                return makeRequest(value.id);
+              },
+              delete: (key) => {
+                if (store) store.data.delete(key);
+                return makeRequest(undefined);
+              },
+              getAll: () => makeRequest(Array.from(store?.data.values() || []))
+            };
+          }
+        };
+      }
+    };
+
+    const request = {
       onsuccess: null,
       onerror: null,
       onupgradeneeded: null,
-
-      result: {
-        name,
-        version,
-        objectStoreNames: {
-          contains: (storeName) => {
-            return this.databases.get(name)?.stores.has(storeName) || false;
-          }
-        },
-        createObjectStore: (storeName, options) => {
-          if (!this.databases.has(name)) {
-            this.databases.set(name, { stores: new Map() });
-          }
-          
-          const store = {
-            name: storeName,
-            data: new Map(),
-            indexes: new Map(),
-            
-            createIndex: (indexName, keyPath, options) => {
-              this.indexes.set(indexName, { keyPath, options });
-            }
-          };
-
-          this.databases.get(name).stores.set(storeName, store);
-          return store;
-        },
-
-        transaction: (storeNames, mode) => {
-          const stores = Array.isArray(storeNames) ? storeNames : [storeNames];
-          
-          return {
-            objectStore: (storeName) => {
-              const db = this.databases.get(name);
-              const store = db?.stores.get(storeName);
-
-              return {
-                get: (key) => ({
-                  onsuccess: null,
-                  onerror: null,
-                  result: store?.data.get(key)
-                }),
-
-                put: (value) => ({
-                  onsuccess: null,
-                  onerror: null,
-                  result: (() => {
-                    store?.data.set(value.id, value);
-                    return value.id;
-                  })()
-                }),
-
-                delete: (key) => ({
-                  onsuccess: null,
-                  onerror: null,
-                  result: (() => {
-                    store?.data.delete(key);
-                    return undefined;
-                  })()
-                }),
-
-                getAll: () => ({
-                  onsuccess: null,
-                  onerror: null,
-                  result: Array.from(store?.data.values() || [])
-                })
-              };
-            }
-          };
-        }
-      }
+      result: dbResult
     };
+
+    // Fire callbacks asynchronously like real IndexedDB
+    Promise.resolve().then(() => {
+      // Fire onupgradeneeded first (for new databases)
+      if (request.onupgradeneeded) {
+        request.onupgradeneeded({ target: request, oldVersion: 0, newVersion: version });
+      }
+      // Then fire onsuccess
+      if (request.onsuccess) {
+        request.onsuccess({ target: request });
+      }
+    });
+
+    return request;
   }
 
   deleteDatabase(name) {

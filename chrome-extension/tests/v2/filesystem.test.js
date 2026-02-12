@@ -171,8 +171,7 @@ describe('JTBD-106: System stores directory handle in IndexedDB', () => {
 
   it('should store directory handle with metadata', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
@@ -206,8 +205,7 @@ describe('JTBD-107: System retrieves directory handle from IndexedDB', () => {
 
   it('should retrieve stored directory handle', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
@@ -226,8 +224,7 @@ describe('JTBD-107: System retrieves directory handle from IndexedDB', () => {
 
   it('should return null for non-existent handle', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const retrieved = await persistence.getDirectoryHandle('non-existent-id');
@@ -253,8 +250,7 @@ describe('JTBD-108: System verifies stored handle is still valid', () => {
 
   it('should test directory access', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();
@@ -265,8 +261,7 @@ describe('JTBD-108: System verifies stored handle is still valid', () => {
 
   it('should return false for invalid handle', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const isValid = await persistence.testDirectoryAccess(null);
@@ -292,8 +287,7 @@ describe('JTBD-110: System removes invalid handles from storage', () => {
 
   it('should remove directory handle from storage', async () => {
     if (!persistence) {
-      console.log('⏭️  Persistence not available, skipping test');
-      return;
+      throw new Error('Persistence module not loaded — check run-all.js module setup');
     }
 
     const dirHandle = await window.showDirectoryPicker();

@@ -393,11 +393,29 @@ class Expect {
     }
   }
 
+  toBeGreaterThanOrEqual(expected) {
+    const pass = this.actual >= expected;
+    if ((pass && this.isNot) || (!pass && !this.isNot)) {
+      throw new Error(
+        `Expected ${this.actual} ${this.isNot ? 'not ' : ''}to be greater than or equal to ${expected}`
+      );
+    }
+  }
+
   toBeLessThan(expected) {
     const pass = this.actual < expected;
     if ((pass && this.isNot) || (!pass && !this.isNot)) {
       throw new Error(
         `Expected ${this.actual} ${this.isNot ? 'not ' : ''}to be less than ${expected}`
+      );
+    }
+  }
+
+  toBeLessThanOrEqual(expected) {
+    const pass = this.actual <= expected;
+    if ((pass && this.isNot) || (!pass && !this.isNot)) {
+      throw new Error(
+        `Expected ${this.actual} ${this.isNot ? 'not ' : ''}to be less than or equal to ${expected}`
       );
     }
   }

@@ -1,6 +1,6 @@
 /**
  * Run All V2 Tests (Node.js)
- * 
+ *
  * Sets up globals to match browser environment, then loads and runs each test file.
  */
 
@@ -19,24 +19,46 @@ const mocks = setupMocks();
 // 4. Ensure showDirectoryPicker is on window
 global.window.showDirectoryPicker = global.showDirectoryPicker;
 
-// 5. Stub browser modules that test files reference
-global.window = global.window || {};
-global.window.MoatTaskStore = null;
-global.window.MoatMarkdownGenerator = null;
-global.window.MoatPersistence = null;
-global.window.MoatSafeStorage = null;
-
-// Try loading the actual utility modules
+// 5. Load utility modules and wire them to window.* globals
+//    The modules use `module.exports` in Node.js, so require() returns
+//    the exports but never sets window.*. We bridge that here.
 try {
-  // taskStore.js uses an IIFE that attaches to window
-  require('../../utils/taskStore.js');
-} catch (e) { /* optional */ }
+  const taskStoreModule = require('../../utils/taskStore.js');
+  global.window.MoatTaskStore = taskStoreModule;
+  console.log('✅ Loaded: MoatTaskStore');
+} catch (e) {
+  console.warn('⚠️  Could not load taskStore.js:', e.message);
+  global.window.MoatTaskStore = null;
+}
 
 try {
-  require('../../utils/markdownGenerator.js');
-} catch (e) { /* optional */ }
+  const markdownModule = require('../../utils/markdownGenerator.js');
+  global.window.MoatMarkdownGenerator = markdownModule;
+  console.log('✅ Loaded: MoatMarkdownGenerator');
+} catch (e) {
+  console.warn('⚠️  Could not load markdownGenerator.js:', e.message);
+  global.window.MoatMarkdownGenerator = null;
+}
 
-// 5. Collect runners from each test file
+try {
+  const persistenceModule = require('../../utils/persistence.js');
+  global.window.MoatPersistence = persistenceModule.MoatPersistence;
+  console.log('✅ Loaded: MoatPersistence');
+} catch (e) {
+  console.warn('⚠️  Could not load persistence.js:', e.message);
+  global.window.MoatPersistence = null;
+}
+
+try {
+  const safeStorageModule = require('../../utils/safeStorage.js');
+  global.window.MoatSafeStorage = safeStorageModule.MoatSafeStorage;
+  console.log('✅ Loaded: MoatSafeStorage');
+} catch (e) {
+  console.warn('⚠️  Could not load safeStorage.js:', e.message);
+  global.window.MoatSafeStorage = null;
+}
+
+// 6. Collect runners from each test file
 const testFiles = [
   './connection.test.js',
   './tasks.test.js',
@@ -46,7 +68,7 @@ const testFiles = [
 ];
 
 (async function main() {
-  console.log('🚀 Drawbridge V2 Test Suite');
+  console.log('\n🚀 Drawbridge V2 Test Suite');
   console.log('='.repeat(60));
   console.log(`Running ${testFiles.length} test files...\n`);
 
@@ -62,18 +84,13 @@ const testFiles = [
     console.log('─'.repeat(60));
 
     try {
-      // Each test file creates a `runner` and registers suites.
-      // We need to capture it. The files assign to a local `runner` const,
-      // so we'll use a wrapper approach: override TestRunner to collect.
-      
       // Clear require cache so each file gets fresh state
       delete require.cache[require.resolve(file)];
-      
-      // The test files do `const runner = new TestRunner()` at top level,
-      // then export nothing. We need to intercept the TestRunner constructor.
+
+      // Intercept TestRunner constructor to capture the runner instance
       let capturedRunner = null;
       const OrigRunner = TestRunner;
-      
+
       global.TestRunner = class extends OrigRunner {
         constructor() {
           super();
@@ -110,7 +127,7 @@ const testFiles = [
   console.log(`✅ Passed:  ${totalPassed}`);
   console.log(`❌ Failed:  ${totalFailed}`);
   console.log(`⏭️  Skipped: ${totalSkipped}`);
-  
+
   const passRate = totalTests > 0 ? ((totalPassed / totalTests) * 100).toFixed(1) : 0;
   console.log(`\n📈 Pass Rate: ${passRate}%`);
 
