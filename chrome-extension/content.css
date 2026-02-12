@@ -1,0 +1,168 @@
+/* Drawbridge Content Script Styles */
+/* These styles are injected into web pages for overlays and comment boxes */
+
+/* Comment Mode Cursor */
+body.float-comment-mode {
+  cursor: pointer !important;
+}
+
+body.float-comment-mode * {
+  cursor: pointer !important;
+}
+
+/* Drawing Mode Cursor */
+body.float-drawing-mode {
+  cursor: crosshair !important;
+}
+
+body.float-drawing-mode * {
+  cursor: crosshair !important;
+}
+
+/* Element Highlight */
+.float-highlight {
+  outline: 2px solid #3B82F6 !important;
+  outline-offset: 2px !important;
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  transition: all 0.2s ease !important;
+}
+
+.float-highlight:not(img):not(button):not(a):not(input) {
+  min-height: 20px !important;
+  min-width: 20px !important;
+}
+
+/* Drawing Canvas Overlay */
+.float-drawing-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  background: transparent;
+}
+
+.float-drawing-canvas[style*="pointer-events: auto"] {
+  cursor: crosshair;
+}
+
+/* Comment Box */
+.float-comment-box {
+  position: fixed;
+  width: 300px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  z-index: 10001;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.float-comment-input {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  background: #ffffff;
+  color: #1f2937;
+  box-sizing: border-box;
+}
+
+.float-comment-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.float-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.float-comment-actions button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  height: 32px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.float-comment-cancel {
+  background: #ffffff;
+  color: #4b5563;
+  border: 1px solid #e5e7eb !important;
+}
+
+.float-comment-cancel:hover {
+  background: #f9fafb;
+  color: #1f2937;
+  border-color: #d1d5db !important;
+}
+
+.float-comment-submit {
+  background: #3b82f6;
+  color: white;
+  font-weight: 500;
+  border: 1px solid #3b82f6 !important;
+}
+
+.float-comment-submit:hover {
+  background: #2563eb;
+}
+
+/* Shake animation for comment box */
+.float-shake {
+  animation: float-shake 0.5s ease-in-out !important;
+}
+
+@keyframes float-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+  20%, 40%, 60%, 80% { transform: translateX(10px); }
+}
+
+/* Notification Toast */
+.float-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #1f2937;
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10002;
+  animation: float-slide-up 0.3s ease;
+  max-width: 300px;
+  pointer-events: auto;
+}
+
+.float-notification.float-error {
+  background: #dc2626;
+  color: white;
+}
+
+@keyframes float-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
