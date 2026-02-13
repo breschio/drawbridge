@@ -135,77 +135,61 @@ async function run() {
     }
 
     // === TEST 3: Content script responds to ping via background relay ===
-    // In V2, content scripts run in Chrome's isolated world and don't inject
-    // visible DOM markers (Google Fonts injection was V1). The correct way to
-    // verify is to ping the content script through the background service worker,
-    // which is how the side panel communicates in production.
+    // In V2, content scripts run in Chrome's isolated world. The correct way to
+    // verify injection is to ping the content script through chrome.tabs.sendMessage
+    // from an extension page — the same relay the side panel uses in production.
+    // IMPORTANT: We query by URL, not "active tab", because opening the side panel
+    // as a new tab changes which tab is "active".
     const page = await browser.newPage();
     try {
       await page.goto('http://localhost:3456', { waitUntil: 'networkidle2', timeout: 15000 });
-      
+
       // Give content script time to initialize
       await new Promise(r => setTimeout(r, 2000));
 
-      // Use the background script to relay a ping to the content script
-      // We access the service worker and ask it to sendMessage to the tab
-      const swTarget = browser.targets().find(t => 
-        t.type() === 'service_worker' && t.url().includes('background.js')
-      );
-      
-      if (swTarget) {
-        const swWorker = await swTarget.worker();
-        const tabId = await page.evaluate(() => {
-          // This won't work from main world, so we'll use another approach
-          return null;
+      if (extensionId) {
+        const spPage = await browser.newPage();
+        await spPage.goto(`chrome-extension://${extensionId}/sidepanel/sidepanel.html`, {
+          waitUntil: 'networkidle2', timeout: 10000
         });
-        
-        // Alternative: use chrome.tabs.sendMessage from side panel context
-        if (extensionId) {
-          const spPage = await browser.newPage();
-          await spPage.goto(`chrome-extension://${extensionId}/sidepanel/sidepanel.html`, {
-            waitUntil: 'networkidle2', timeout: 10000
-          });
-          await new Promise(r => setTimeout(r, 1000));
-          
-          // The side panel's connectWithRetry pings the content script
-          const contentScriptReady = await spPage.evaluate(async () => {
-            // Use the side panel's own ping logic
-            try {
-              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-              if (!tab?.id) return { ready: false, reason: 'no active tab' };
-              
-              return new Promise((resolve) => {
-                chrome.tabs.sendMessage(tab.id, { action: 'ping' }, (response) => {
-                  if (chrome.runtime.lastError) {
-                    resolve({ ready: false, reason: chrome.runtime.lastError.message });
-                  } else {
-                    resolve({ ready: response?.ready === true, response });
-                  }
-                });
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Query for the demo tab by URL — not "active tab" which would be this side panel page
+        const contentScriptReady = await spPage.evaluate(async () => {
+          try {
+            const tabs = await chrome.tabs.query({ url: 'http://localhost:3456/*' });
+            if (!tabs.length) return { ready: false, reason: 'demo tab not found' };
+
+            return new Promise((resolve) => {
+              chrome.tabs.sendMessage(tabs[0].id, { action: 'ping' }, (response) => {
+                if (chrome.runtime.lastError) {
+                  resolve({ ready: false, reason: chrome.runtime.lastError.message });
+                } else {
+                  resolve({ ready: response?.ready === true, response });
+                }
               });
-            } catch (e) {
-              return { ready: false, reason: e.message };
-            }
-          });
-          
-          if (contentScriptReady.ready) {
-            log('PASS', 'T03: Content script responds to ping', JSON.stringify(contentScriptReady));
-          } else {
-            log('WARN', 'T03: Content script ping failed', JSON.stringify(contentScriptReady));
+            });
+          } catch (e) {
+            return { ready: false, reason: e.message };
           }
-          await spPage.close();
+        });
+
+        if (contentScriptReady.ready) {
+          log('PASS', 'T03: Content script responds to ping', JSON.stringify(contentScriptReady));
         } else {
-          log('WARN', 'T03: Skipped — extension ID not available');
+          log('WARN', 'T03: Content script ping failed', JSON.stringify(contentScriptReady));
         }
+        await spPage.close();
       } else {
-        log('WARN', 'T03: Skipped — service worker not found');
+        log('WARN', 'T03: Skipped — extension ID not available');
       }
     } catch (e) {
       log('FAIL', 'T03: Content script ping', e.message);
     }
 
     // === TEST 4: Content script handles GET_CONNECTION_STATUS ===
-    // Verify the content script handles V2 message types correctly
+    // Verify the content script handles V2 message types correctly.
+    // Query demo tab by URL (not active tab — that would be the side panel page).
     try {
       if (extensionId) {
         const spPage = await browser.newPage();
@@ -213,14 +197,14 @@ async function run() {
           waitUntil: 'networkidle2', timeout: 10000
         });
         await new Promise(r => setTimeout(r, 1000));
-        
+
         const statusResult = await spPage.evaluate(async () => {
           try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab?.id) return { success: false, reason: 'no active tab' };
-            
+            const tabs = await chrome.tabs.query({ url: 'http://localhost:3456/*' });
+            if (!tabs.length) return { success: false, reason: 'demo tab not found' };
+
             return new Promise((resolve) => {
-              chrome.tabs.sendMessage(tab.id, { type: 'GET_CONNECTION_STATUS' }, (response) => {
+              chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_CONNECTION_STATUS' }, (response) => {
                 if (chrome.runtime.lastError) {
                   resolve({ success: false, reason: chrome.runtime.lastError.message });
                 } else {
@@ -232,9 +216,9 @@ async function run() {
             return { success: false, reason: e.message };
           }
         });
-        
+
         if (statusResult.success && statusResult.response) {
-          log('PASS', 'T04: Content script handles GET_CONNECTION_STATUS', 
+          log('PASS', 'T04: Content script handles GET_CONNECTION_STATUS',
             `connected: ${statusResult.response.connected}, path: "${statusResult.response.path}"`);
         } else {
           log('WARN', 'T04: GET_CONNECTION_STATUS failed', JSON.stringify(statusResult));
@@ -248,19 +232,19 @@ async function run() {
     }
 
     // === TEST 5: Content CSS injected (not moat.css) ===
-    // NOTE: Extension-injected CSS (via manifest content_scripts.css) creates
-    // anonymous stylesheets with no href. Check for known CSS rules instead.
+    // Extension-injected CSS (via manifest content_scripts.css) gets an href like
+    // chrome-extension://id/content.css — NOT anonymous. Check for that href and
+    // also verify no moat.css (V1) is present.
     try {
       const cssCheck = await page.evaluate(() => {
         const sheets = Array.from(document.styleSheets);
         const hasMoatCss = sheets.some(s => s.href && s.href.includes('moat.css'));
+        const hasContentCss = sheets.some(s => s.href && s.href.includes('content.css'));
 
-        // content.css defines rules for .float-comment-mode, .float-highlight, etc.
-        // Extension-injected CSS has no href, so scan rules in anonymous sheets.
+        // Also try to find known CSS rules as a fallback
         let hasContentCssRules = false;
         for (const sheet of sheets) {
           try {
-            if (sheet.href) continue; // Skip linked sheets — we want injected ones
             const rules = Array.from(sheet.cssRules || []);
             const hasFloatRule = rules.some(r =>
               r.selectorText && (
@@ -278,17 +262,16 @@ async function run() {
           }
         }
 
-        return { hasContentCssRules, hasMoatCss, sheetCount: sheets.length };
+        return { hasContentCss, hasContentCssRules, hasMoatCss, sheetCount: sheets.length };
       });
 
-      if (cssCheck.hasContentCssRules && !cssCheck.hasMoatCss) {
-        log('PASS', 'T05: V2 content.css rules injected, moat.css removed');
-      } else if (!cssCheck.hasMoatCss && !cssCheck.hasContentCssRules) {
-        log('WARN', 'T05: No moat.css (V1 removed) but content.css rules not detected', JSON.stringify(cssCheck));
+      const contentDetected = cssCheck.hasContentCss || cssCheck.hasContentCssRules;
+      if (contentDetected && !cssCheck.hasMoatCss) {
+        log('PASS', 'T05: V2 content.css injected, moat.css removed', JSON.stringify(cssCheck));
       } else if (cssCheck.hasMoatCss) {
         log('FAIL', 'T05: V1 moat.css still present', JSON.stringify(cssCheck));
       } else {
-        log('PASS', 'T05: V2 content.css rules injected', JSON.stringify(cssCheck));
+        log('WARN', 'T05: content.css not detected', JSON.stringify(cssCheck));
       }
     } catch (e) {
       log('FAIL', 'T05: CSS injection check', e.message);
