@@ -625,7 +625,7 @@
     
     // Check if persistence is supported
     if (!MoatPersistence.isSupported()) {
-      console.warn('⚠️ Moat: Persistence not supported (missing File System API or IndexedDB)');
+      console.warn('⚠️ Moat: Persistence not supported (missing IndexedDB)');
       await checkLegacyConnection();
       return;
     }

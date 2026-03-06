@@ -165,15 +165,23 @@ describe('MoatPersistence', () => {
   });
 
   test('should support feature detection', () => {
-    // Mock supported environment
-    global.window.showDirectoryPicker = () => {};
+    // Mock supported environment (only IndexedDB needed)
     global.indexedDB = {};
-    
+
     expect(global.window.MoatPersistence.isSupported()).toBe(true);
-    
-    // Mock unsupported environment
-    delete global.window.showDirectoryPicker;
+
+    // Mock unsupported environment (no IndexedDB)
+    delete global.indexedDB;
     expect(global.window.MoatPersistence.isSupported()).toBe(false);
+  });
+
+  test('should be supported even without showDirectoryPicker', () => {
+    // Persistence only needs IndexedDB; showDirectoryPicker is checked
+    // separately where it's actually called (e.g., setupProject)
+    global.indexedDB = {};
+    delete global.window.showDirectoryPicker;
+
+    expect(global.window.MoatPersistence.isSupported()).toBe(true);
   });
 
   test('should initialize IndexedDB correctly', async () => {

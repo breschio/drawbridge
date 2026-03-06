@@ -348,10 +348,12 @@ class MoatPersistence {
   }
 
   /**
-   * Check if File System Access API is supported
+   * Check if persistence storage (IndexedDB) is supported.
+   * Note: showDirectoryPicker is checked separately where it's actually called
+   * (e.g., setupProject) since it may not be available in content script contexts.
    */
   static isSupported() {
-    return 'showDirectoryPicker' in window && 'indexedDB' in window;
+    return 'indexedDB' in window;
   }
 }
 
