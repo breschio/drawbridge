@@ -20,8 +20,14 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "js": ["chrome-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["<all_urls>"],
       "js": [
         "html2canvas.min.js",
+        "utils/chromeHelper.js",
         "utils/safeStorage.js",
         "utils/persistence.js",
         "utils/taskStore.js",
@@ -31,7 +37,8 @@
         "moat.js"
       ],
       "css": ["moat.css"],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "world": "MAIN"
     }
   ],
   "action": {
