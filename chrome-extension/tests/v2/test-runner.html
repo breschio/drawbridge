@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drawbridge V2 Test Runner</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #3B82F6;
+      padding-bottom: 10px;
+    }
+    
+    .status {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .status h2 {
+      margin-top: 0;
+      color: #666;
+      font-size: 16px;
+      font-weight: normal;
+    }
+    
+    .module-list {
+      list-style: none;
+      padding: 0;
+      margin: 10px 0;
+    }
+    
+    .module-list li {
+      padding: 8px;
+      margin: 4px 0;
+      background: #f9f9f9;
+      border-radius: 4px;
+    }
+    
+    .available { color: #10b981; }
+    .missing { color: #ef4444; }
+    
+    .console-output {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      max-height: 600px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    
+    .button-group {
+      margin: 20px 0;
+    }
+    
+    button {
+      background: #3B82F6;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    
+    button:hover {
+      background: #2563EB;
+    }
+    
+    button:disabled {
+      background: #9CA3AF;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Drawbridge V2 Test Runner</h1>
+  
+  <div class="status">
+    <h2>📦 Module Status</h2>
+    <ul class="module-list" id="moduleStatus">
+      <li>Loading...</li>
+    </ul>
+  </div>
+  
+  <div class="button-group">
+    <button id="runTests" onclick="runAllTests()">▶️ Run All Tests</button>
+    <button id="clearConsole" onclick="clearConsoleOutput()">🗑️ Clear Console</button>
+  </div>
+  
+  <div class="status">
+    <h2>📊 Test Results</h2>
+    <div id="testResults">
+      <p>Click "Run All Tests" to start testing...</p>
+    </div>
+  </div>
+  
+  <div class="status">
+    <h2>💻 Console Output</h2>
+    <div class="console-output" id="consoleOutput"></div>
+  </div>
+
+  <!-- Load utilities (from parent directories) -->
+  <script src="../../utils/safeStorage.js"></script>
+  <script src="../../utils/taskStore.js"></script>
+  <script src="../../utils/markdownGenerator.js"></script>
+  <script src="../../utils/persistence.js"></script>
+  
+  <!-- Load test framework -->
+  <script src="chrome-mock.js"></script>
+  <script src="test-runner.js"></script>
+  
+  <!-- Load tests -->
+  <script src="connection.test.js"></script>
+  <script src="tasks.test.js"></script>
+  <script src="markdown.test.js"></script>
+  <script src="filesystem.test.js"></script>
+  <script src="v2-architecture.test.js"></script>
+  
+  <script>
+    // Capture console.log output
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+    const consoleOutput = document.getElementById('consoleOutput');
+    
+    function appendToConsole(message, type = 'log') {
+      const color = type === 'error' ? '#ef4444' : type === 'warn' ? '#f59e0b' : '#d4d4d4';
+      const line = document.createElement('div');
+      line.style.color = color;
+      line.textContent = message;
+      consoleOutput.appendChild(line);
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+    
+    console.log = (...args) => {
+      originalLog(...args);
+      appendToConsole(args.join(' '), 'log');
+    };
+    
+    console.error = (...args) => {
+      originalError(...args);
+      appendToConsole(args.join(' '), 'error');
+    };
+    
+    console.warn = (...args) => {
+      originalWarn(...args);
+      appendToConsole(args.join(' '), 'warn');
+    };
+    
+    // Check module availability
+    function checkModules() {
+      const modules = {
+        'TaskStore': !!window.MoatTaskStore,
+        'MarkdownGenerator': !!window.MoatMarkdownGenerator,
+        'Persistence': !!window.MoatPersistence,
+        'SafeStorage': !!window.MoatSafeStorage,
+        'Test Runner': !!window.TestRunner,
+        'Chrome Mocks': !!window.setupMocks
+      };
+      
+      const statusList = document.getElementById('moduleStatus');
+      statusList.innerHTML = '';
+      
+      Object.entries(modules).forEach(([name, available]) => {
+        const li = document.createElement('li');
+        const status = available ? '✅' : '❌';
+        const className = available ? 'available' : 'missing';
+        li.innerHTML = `<span class="${className}">${status} ${name}</span>`;
+        statusList.appendChild(li);
+      });
+      
+      return Object.values(modules).every(v => v);
+    }
+    
+    // Clear console output
+    function clearConsoleOutput() {
+      consoleOutput.innerHTML = '';
+    }
+    
+    // Run all tests
+    async function runAllTests() {
+      const button = document.getElementById('runTests');
+      const resultsDiv = document.getElementById('testResults');
+      
+      button.disabled = true;
+      button.textContent = '⏳ Running tests...';
+      resultsDiv.innerHTML = '<p>Running tests...</p>';
+      clearConsoleOutput();
+      
+      try {
+        console.log('🚀 Starting Drawbridge V2 Test Suite\n');
+        
+        // Setup mocks
+        const mocks = setupMocks();
+        console.log('✅ Mocks initialized\n');
+        
+        // Run connection tests
+        console.log('📦 Running Connection Tests...');
+        await connectionTestRunner.run();
+        const connectionResults = connectionTestRunner.getResults();
+        
+        // Run task tests
+        console.log('\n📦 Running Task Management Tests...');
+        await tasksTestRunner.run();
+        const taskResults = tasksTestRunner.getResults();
+        
+        // Run markdown tests
+        console.log('\n📦 Running Markdown Generation Tests...');
+        await markdownTestRunner.run();
+        const markdownResults = markdownTestRunner.getResults();
+        
+        // Run filesystem tests
+        console.log('\n📦 Running File System & Persistence Tests...');
+        await filesystemTestRunner.run();
+        const filesystemResults = filesystemTestRunner.getResults();
+        
+        // Run V2 architecture tests
+        console.log('\n📦 Running V2 Architecture & Message Passing Tests...');
+        await v2ArchitectureTestRunner.run();
+        const v2Results = v2ArchitectureTestRunner.getResults();
+        
+        // Calculate totals
+        const totalTests = connectionResults.stats.total + taskResults.stats.total + markdownResults.stats.total + filesystemResults.stats.total + v2Results.stats.total;
+        const totalPassed = connectionResults.stats.passed + taskResults.stats.passed + markdownResults.stats.passed + filesystemResults.stats.passed + v2Results.stats.passed;
+        const totalFailed = connectionResults.stats.failed + taskResults.stats.failed + markdownResults.stats.failed + filesystemResults.stats.failed + v2Results.stats.failed;
+        const totalSkipped = connectionResults.stats.skipped + taskResults.stats.skipped + markdownResults.stats.skipped + filesystemResults.stats.skipped + v2Results.stats.skipped;
+        const passRate = totalTests > 0 ? ((totalPassed / totalTests) * 100).toFixed(1) : 0;
+        
+        // Display results
+        resultsDiv.innerHTML = `
+          <h3>Overall Summary</h3>
+          <p><strong>Total Tests:</strong> ${totalTests}</p>
+          <p><strong>✅ Passed:</strong> ${totalPassed}</p>
+          <p><strong>❌ Failed:</strong> ${totalFailed}</p>
+          <p><strong>⏭️  Skipped:</strong> ${totalSkipped}</p>
+          <p><strong>📈 Pass Rate:</strong> ${passRate}%</p>
+          
+          <h3>Test Suites</h3>
+          <ul>
+            <li><strong>Connection Tests:</strong> ${connectionResults.stats.passed}/${connectionResults.stats.total} passing</li>
+            <li><strong>Task Management Tests:</strong> ${taskResults.stats.passed}/${taskResults.stats.total} passing</li>
+            <li><strong>Markdown Generation Tests:</strong> ${markdownResults.stats.passed}/${markdownResults.stats.total} passing</li>
+            <li><strong>File System Tests:</strong> ${filesystemResults.stats.passed}/${filesystemResults.stats.total} passing</li>
+            <li><strong>V2 Architecture Tests:</strong> ${v2Results.stats.passed}/${v2Results.stats.total} passing</li>
+          </ul>
+          
+          ${totalFailed === 0 ? '<p style="color: #10b981; font-weight: bold;">🎉 All tests passed!</p>' : '<p style="color: #ef4444; font-weight: bold;">⚠️  Some tests failed. Check console for details.</p>'}
+        `;
+        
+        console.log('\n✨ Test execution complete!');
+        
+      } catch (error) {
+        console.error('❌ Test execution failed:', error);
+        resultsDiv.innerHTML = `<p style="color: #ef4444;">Error running tests: ${error.message}</p>`;
+      } finally {
+        button.disabled = false;
+        button.textContent = '▶️ Run All Tests';
+      }
+    }
+    
+    // Check modules on load
+    window.addEventListener('load', () => {
+      const allModulesAvailable = checkModules();
+      if (!allModulesAvailable) {
+        console.warn('⚠️  Some required modules are not available. Tests may fail.');
+      } else {
+        console.log('✅ All required modules loaded successfully!');
+      }
+    });
+  </script>
+</body>
+</html>
