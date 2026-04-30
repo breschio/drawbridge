@@ -119,7 +119,8 @@ class TaskStore {
     }
 
     /**
-     * Load tasks from memory (for now - file operations will be added in task 1.5)
+     * Get in-memory tasks sorted by timestamp (newest first).
+     * Use loadTasksFromFile() to refresh from disk.
      * @returns {Array} Array of task objects
      */
     getTasks() {
