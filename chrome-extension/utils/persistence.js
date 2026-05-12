@@ -287,34 +287,49 @@ class MoatPersistence {
   }
 
   /**
-   * Complete restoration workflow: get handle and verify permissions
+   * Complete restoration workflow: get handle and verify permissions.
+   *
+   * Note on transient activation: File System Access API's requestPermission()
+   * requires a recent user gesture. Calling it during page-load restoration
+   * (where no gesture exists) just forces a fresh directory-picker dialog every
+   * visit. We therefore queryPermission() only; if not 'granted' we hand back
+   * `requiresReconnection` and let the UI prompt on a real user click.
    */
-  async restoreProjectConnection() {
+  async restoreProjectConnection({ allowPermissionPrompt = false } = {}) {
     try {
       const projectId = `project_${window.location.origin}`;
       const record = await this.getDirectoryHandle(projectId);
-      
+
       if (!record) {
         console.log('ℹ️ Moat Persistence: No stored connection found');
         return { success: false, reason: 'No stored connection' };
       }
 
       const { handle, path, timestamp } = record;
-      
-      // Test if handle is still accessible
-      const isAccessible = await this.testDirectoryAccess(handle);
-      if (!isAccessible) {
-        console.log('ℹ️ Moat Persistence: Stored handle is no longer accessible');
-        
-        // Try to request permission again
-        const permissionGranted = await this.requestPermission(handle);
-        if (!permissionGranted) {
-          console.log('❌ Moat Persistence: Permission could not be restored');
-          return { 
-            success: false, 
-            reason: 'Permission denied',
+
+      // Query (don't request) permission so we don't trigger a picker without
+      // a user gesture.
+      const hasPermission = await this.verifyPermission(handle);
+      if (!hasPermission) {
+        if (allowPermissionPrompt) {
+          // Caller asserts we are inside a user gesture — request permission now.
+          const granted = await this.requestPermission(handle);
+          if (!granted) {
+            console.log('ℹ️ Moat Persistence: Permission not granted on request');
+            return {
+              success: false,
+              reason: 'Permission denied',
+              requiresReconnection: true,
+              path
+            };
+          }
+        } else {
+          console.log('ℹ️ Moat Persistence: Stored handle needs re-permission; waiting for user gesture');
+          return {
+            success: false,
+            reason: 'Permission not yet granted',
             requiresReconnection: true,
-            path 
+            path
           };
         }
       }
@@ -322,7 +337,7 @@ class MoatPersistence {
       // Verify we can create/access the .moat directory
       try {
         const moatDir = await handle.getDirectoryHandle('.moat', { create: true });
-        
+
         console.log('✅ Moat Persistence: Project connection restored successfully');
         return {
           success: true,

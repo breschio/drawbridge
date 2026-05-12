@@ -333,13 +333,19 @@ class TaskStore {
             // Prepare JSON data with proper formatting
             const jsonData = JSON.stringify(this.tasks, null, 2);
 
-            // Write to file using File System Access API
+            // Write to file using File System Access API.
+            // Use exclusive mode so the in-place write skips the siloed
+            // swap-and-rename, which produces duplicate numbered files when
+            // the target is held open by another editor.
             const fileHandle = await this.directoryHandle.getFileHandle('moat-tasks-detail.json', { create: true });
 
-            // Use keepExistingData: false to truncate and overwrite
-            const writable = await fileHandle.createWritable({ keepExistingData: false });
+            let writable;
+            try {
+                writable = await fileHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+            } catch (err) {
+                writable = await fileHandle.createWritable({ keepExistingData: false });
+            }
 
-            // Write new content (file is truncated first)
             await writable.write(jsonData);
             await writable.close();
 
