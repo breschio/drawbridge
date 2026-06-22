@@ -413,6 +413,85 @@
     }
   }
 
+  // Save clipboard-pasted reference images to ./screenshots and return their paths.
+  async function savePastedImagesToFiles(annotation) {
+    if (!annotation.pastedImages?.length || !window.directoryHandle) {
+      return [];
+    }
+    const screenshotsDir = await window.directoryHandle.getDirectoryHandle('screenshots', { create: true });
+    const paths = [];
+    for (let i = 0; i < annotation.pastedImages.length; i++) {
+      const match = /^data:(image\/[\w.+-]+);base64,(.*)$/s.exec(annotation.pastedImages[i]);
+      if (!match) continue;
+      const [, mime, base64] = match;
+      const ext = mime.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const fileName = `${annotation.id}-paste-${i + 1}.${ext}`;
+      try {
+        const fileHandle = await screenshotsDir.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable({ keepExistingData: false });
+        await writable.write(new Blob([bytes], { type: mime }));
+        await writable.close();
+        paths.push(`./screenshots/${fileName}`);
+      } catch (error) {
+        console.error('Moat: Failed to save pasted image:', error);
+      }
+    }
+    return paths;
+  }
+
+  // Wire clipboard-image paste onto a comment box's textarea: store image data
+  // URLs on box.pastedImages and render removable thumbnails. Text paste is
+  // left untouched (we only intercept when the clipboard carries an image).
+  function enablePasteImages(box, textarea) {
+    box.pastedImages = [];
+    const strip = box.querySelector('.float-comment-attachments');
+
+    const render = () => {
+      if (!strip) return;
+      strip.replaceChildren();
+      box.pastedImages.forEach((dataUrl, index) => {
+        const thumb = document.createElement('div');
+        thumb.className = 'float-comment-thumb';
+
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        thumb.appendChild(img);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'float-comment-thumb-remove';
+        remove.textContent = '×';
+        remove.title = 'Remove';
+        remove.addEventListener('click', () => {
+          box.pastedImages.splice(index, 1);
+          render();
+        });
+        thumb.appendChild(remove);
+
+        strip.appendChild(thumb);
+      });
+    };
+
+    textarea.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageItems = [...items].filter(item => item.type.startsWith('image/'));
+      if (!imageItems.length) return; // no image on clipboard → normal text paste
+      e.preventDefault();
+      for (const item of imageItems) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          box.pastedImages.push(reader.result);
+          render();
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
   /**
    * Capture screenshot using Chrome's native API and crop to specified region
    * @param {Object} captureArea - { x, y, width, height } in viewport/CSS pixels
@@ -2910,6 +2989,16 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     console.log('📝 Moat: ===== STARTING ANNOTATION PROCESSING =====');
     console.log('📝 Moat: Processing annotation:', annotation.elementLabel);
     console.log('📝 Moat: Annotation ID:', annotation.id);
+
+    // Persist any clipboard-pasted reference images and reference them in the
+    // task comment, the field /bridge always reads, so the LLM picks them up.
+    if (annotation.pastedImages?.length) {
+      const refs = await savePastedImagesToFiles(annotation);
+      if (refs.length) {
+        annotation.attachments = refs;
+        annotation.content = `${annotation.content}\n\nPasted reference image(s):\n${refs.map(p => `- ${p}`).join('\n')}`.trim();
+      }
+    }
     
     // Choose save system based on availability (Task 2.8: End-to-end flow)
     const canUseNew = canUseNewTaskSystem();
@@ -3214,11 +3303,12 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     commentBox.highlightedElement = element; // Store element reference
     commentBox.highlightOverlay = hoverOverlay; // Store overlay reference for cleanup
     commentBox.innerHTML = `
-      <textarea 
-        class="float-comment-input" 
-        placeholder="What needs to be fixed?"
+      <textarea
+        class="float-comment-input"
+        placeholder="What needs to be fixed? (paste an image to attach a reference)"
         autofocus
       ></textarea>
+      <div class="float-comment-attachments"></div>
       <div class="float-comment-actions">
         <button class="float-comment-cancel">Cancel</button>
         <button class="float-comment-submit">Submit (Enter)</button>
@@ -3278,10 +3368,14 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Focus textarea
     setTimeout(() => textarea.focus(), 50);
+
+    // Allow pasting reference images from the clipboard
+    enablePasteImages(commentBox, textarea);
     
     // Handle submit
     const handleSubmit = async () => {
-      const content = textarea.value.trim();
+      const content = textarea.value.trim()
+        || (commentBox.pastedImages?.length ? 'See pasted reference image(s).' : '');
       if (!content) return;
       
       const rect = element.getBoundingClientRect();
@@ -3339,6 +3433,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         hoverOverlay = null;
       }
       
+      annotation.pastedImages = commentBox.pastedImages || [];
       addToQueue(annotation);
       exitCommentMode();
     };
@@ -3562,11 +3657,12 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     commentBox.screenshotData = screenshotData;
     commentBox.rectangleData = rectangleData; // Store rectangle data
     commentBox.innerHTML = `
-      <textarea 
-        class="float-comment-input" 
-        placeholder="What needs to be fixed?"
+      <textarea
+        class="float-comment-input"
+        placeholder="What needs to be fixed? (paste an image to attach a reference)"
         autofocus
       ></textarea>
+      <div class="float-comment-attachments"></div>
       <div class="float-comment-actions">
         <button class="float-comment-cancel">Cancel</button>
         <button class="float-comment-submit">Submit (Enter)</button>
@@ -3619,10 +3715,14 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Focus textarea
     setTimeout(() => textarea.focus(), 50);
+
+    // Allow pasting reference images from the clipboard
+    enablePasteImages(commentBox, textarea);
     
     // Handle submit
     const handleSubmit = async () => {
-      const content = textarea.value.trim();
+      const content = textarea.value.trim()
+        || (commentBox.pastedImages?.length ? 'See pasted reference image(s).' : '');
       if (!content) return;
       
       // Get rectangle data from comment box
@@ -3677,6 +3777,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       exitDrawingMode();
       removeDrawingCanvas();
       
+      annotation.pastedImages = commentBox.pastedImages || [];
       addToQueue(annotation);
       removeCommentBox();
     };
