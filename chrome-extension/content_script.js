@@ -353,6 +353,11 @@
       screenshotPath: screenshotPath || ''
     };
 
+    // Pasted clipboard reference images (paths under ./screenshots), if any
+    if (annotation.attachments?.length) {
+      taskData.attachments = annotation.attachments;
+    }
+
     // Add bounding box data for freeform rectangles (preserve all formats)
     if (annotation.boundingBox && annotation.boundingBox.type === 'freeform') {
       taskData.boundingBox = annotation.boundingBox;
@@ -1453,6 +1458,7 @@ The \`.json\` file is the primary source of truth for all task information. You 
 -   \`selector\`: The precise CSS selector for the target element.
 -   \`title\`, \`boundingRect\`: Context for locating the element.
 -   \`screenshotPath\`: Path to the screenshot showing the user's annotation context.
+-   \`attachments\`: Optional paths to reference images the user pasted from the clipboard (e.g. a target design/mockup). Open each one before implementing, just like the screenshot.
 
 ### Task Dependency Detection
 
@@ -1526,6 +1532,8 @@ Result: Task 1 must complete before Tasks 2 & 3
     -   Visual context and surrounding elements  
     -   Current state vs desired state
     -   Layout and positioning context
+
+    **Pasted reference images**: If the task JSON has an \`attachments\` array, read each listed image as well. These are references the user pasted from their clipboard (a target design, an example to match) and must inform the implementation alongside the screenshot.
 
 3.  **Validation Steps**:
     \`\`\`
@@ -2021,6 +2029,8 @@ Files to read:
 - **Primary data**: \`moat-tasks-detail.json\` - Full task details
 - **Human-readable**: \`moat-tasks.md\` - Task checklist
 - **Screenshots**: \`.moat/screenshots/\` - Visual context
+
+**Pasted references**: A task's \`attachments\` array (if present) lists images the user pasted from their clipboard (\`./screenshots/...-paste-N.png\`). Open each one before implementing — they are reference images (a target design/example) and must guide the change alongside the screenshot.
 
 **Important**: Always check \`.moat/\` subdirectory first before checking project root.
 
