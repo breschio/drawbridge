@@ -56,9 +56,13 @@ temp/
 # Coverage directory used by tools like istanbul
 coverage/
 
-# Playwright
+# Playwright / local e2e (dev-only, not for upstream PR)
 test-results/
 playwright-report/
+playwright.config.js
+jest.config.js
+tests/e2e/
+demo/deep-select-test.html
 
 # Optional npm cache directory
 .npm
