@@ -1,6 +1,6 @@
 {
   "name": "moat",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Moat - Visual UI feedback with markdown task logging",
   "main": "moat-watcher.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "demo": "cd demo && python3 -m http.server 8080",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:e2e": "playwright test"
   },
   "keywords": [
     "chrome-extension",
@@ -22,6 +23,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20.0.0",
     "jest": "^30.0.2"
   }

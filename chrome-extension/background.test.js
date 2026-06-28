@@ -1,7 +1,24 @@
 const manifest = require('./manifest.json');
+const { getContentScriptBuild } = require('./utils/buildInfo.js');
+
+function getReadyPing(overrides = {}) {
+  return {
+    success: true,
+    ready: true,
+    moatLoaded: true,
+    contentScriptBuild: getContentScriptBuild(manifest.version),
+    ...overrides
+  };
+}
 
 function loadBackground({ sendMessage, insertCSS, executeScript } = {}) {
   jest.resetModules();
+
+  global.self = global;
+  global.importScripts = jest.fn(() => {
+    require('./utils/buildInfo.js');
+  });
+  require('./utils/buildInfo.js');
 
   global.chrome = {
     action: {
@@ -17,7 +34,7 @@ function loadBackground({ sendMessage, insertCSS, executeScript } = {}) {
       }
     },
     tabs: {
-      sendMessage: sendMessage || jest.fn((tabId, message, callback) => callback({ success: true, ready: true, moatLoaded: true })),
+      sendMessage: sendMessage || jest.fn((tabId, message, callback) => callback(getReadyPing())),
       captureVisibleTab: jest.fn()
     },
     scripting: {
@@ -53,7 +70,7 @@ describe('background action click handling', () => {
   test('toggles immediately when the content script is already ready', async () => {
     const sendMessage = jest.fn((tabId, message, callback) => {
       if (message.action === 'ping') {
-        callback({ success: true, ready: true, moatLoaded: true });
+        callback(getReadyPing());
         return;
       }
 
@@ -79,7 +96,7 @@ describe('background action click handling', () => {
           return;
         }
 
-        callback({ success: true, ready: true, moatLoaded: true });
+        callback({ ...getReadyPing(), moatLoaded: true });
         return;
       }
 
@@ -100,14 +117,13 @@ describe('background action click handling', () => {
     expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping', 'toggleMoat']);
   });
 
-  test('injects only moat when the content script is ready but moat has not loaded yet', async () => {
+  test('injects full manifest when moat has not loaded yet', async () => {
     let pingCount = 0;
     const sendMessage = jest.fn((tabId, message, callback) => {
       if (message.action === 'ping') {
         pingCount += 1;
         callback({
-          success: true,
-          ready: true,
+          ...getReadyPing(),
           moatLoaded: pingCount > 1
         });
         return;
@@ -125,7 +141,34 @@ describe('background action click handling', () => {
     }, expect.any(Function));
     expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
       target: { tabId: 7 },
-      files: ['moat.js']
+      files: manifest.content_scripts[0].js
+    }, expect.any(Function));
+    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping', 'toggleMoat']);
+  });
+
+  test('injects full manifest when content script build is stale', async () => {
+    let pingCount = 0;
+    const sendMessage = jest.fn((tabId, message, callback) => {
+      if (message.action === 'ping') {
+        pingCount += 1;
+        callback({
+          success: true,
+          ready: true,
+          moatLoaded: true,
+          contentScriptBuild: pingCount > 1 ? getContentScriptBuild(manifest.version) : '1.0.0-outdated'
+        });
+        return;
+      }
+
+      callback({ success: true });
+    });
+    const { handleActionClick } = loadBackground({ sendMessage });
+
+    await handleActionClick({ id: 7, url: 'https://example.com/' });
+
+    expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 7 },
+      files: manifest.content_scripts[0].js
     }, expect.any(Function));
     expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping', 'toggleMoat']);
   });

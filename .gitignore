@@ -56,6 +56,10 @@ temp/
 # Coverage directory used by tools like istanbul
 coverage/
 
+# Playwright
+test-results/
+playwright-report/
+
 # Optional npm cache directory
 .npm
 
@@ -84,3 +88,9 @@ demo/images/
 
 # Standalone UI style guide
 drawbridge-ui/
+
+# Windsurf configuration
+.windsurf/
+
+# Codex CLI configuration
+.codex/

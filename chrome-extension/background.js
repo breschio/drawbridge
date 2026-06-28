@@ -1,5 +1,7 @@
 // chrome-extension/background.js
 
+importScripts('utils/buildInfo.js');
+
 const RESTRICTED_URL_PREFIXES = [
   'chrome://',
   'chrome-extension://',
@@ -101,8 +103,19 @@ async function injectMoatScript(tabId) {
   });
 }
 
+function getExpectedContentScriptBuild() {
+  const buildInfo = globalThis.DrawbridgeBuildInfo;
+  return buildInfo.getContentScriptBuild(chrome.runtime.getManifest().version);
+}
+
 function needsManualInjection(pingResponse) {
-  return !pingResponse?.ready || pingResponse.moatLoaded === false;
+  if (!pingResponse?.ready || pingResponse.moatLoaded === false) {
+    return true;
+  }
+  if (pingResponse.contentScriptBuild !== getExpectedContentScriptBuild()) {
+    return true;
+  }
+  return false;
 }
 
 async function ensureContentScriptsReady(tabId) {
@@ -113,7 +126,13 @@ async function ensureContentScriptsReady(tabId) {
       return;
     }
 
-    await injectMoatScript(tabId);
+    console.warn(
+      'Drawbridge: Injecting content scripts (missing, outdated moat, or stale build:',
+      pingResponse?.contentScriptBuild,
+      'expected:',
+      getExpectedContentScriptBuild() + ')'
+    );
+    await injectManifestContentScripts(tabId);
   } catch (error) {
     console.warn('Drawbridge: Content script not ready, injecting into active tab:', error.message);
     await injectManifestContentScripts(tabId);
@@ -121,7 +140,9 @@ async function ensureContentScriptsReady(tabId) {
 
   const pingResponse = await sendTabMessage(tabId, { action: 'ping' });
   if (needsManualInjection(pingResponse)) {
-    throw new Error('Content script did not report ready after injection');
+    throw new Error(
+      'Content script did not report ready after injection. Refresh the page (Ctrl+Shift+R).'
+    );
   }
 }
 
@@ -167,6 +188,7 @@ if (typeof module !== 'undefined' && module.exports) {
     RESTRICTED_URL_PREFIXES,
     isRestrictedTab,
     needsManualInjection,
+    getExpectedContentScriptBuild,
     handleActionClick,
     ensureContentScriptsReady,
     injectManifestContentScripts,

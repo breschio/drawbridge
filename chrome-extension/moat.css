@@ -84,6 +84,31 @@ body.float-comment-mode * {
   cursor: pointer !important;
 }
 
+body.float-deep-select-active {
+  cursor: crosshair !important;
+}
+
+.float-deep-select-badge {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #fff;
+  background: rgba(245, 158, 11, 0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+}
+
+.float-hover-overlay.float-hover-overlay-deep {
+  border-color: #F59E0B;
+  background-color: rgba(245, 158, 11, 0.12);
+}
+
 /* Drawing Mode */
 body.float-drawing-mode {
   cursor: crosshair !important;

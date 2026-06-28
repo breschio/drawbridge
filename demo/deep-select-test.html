@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drawbridge deep select test</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    h1 { margin-top: 0; }
+    .instructions {
+      max-width: 42rem;
+      margin-bottom: 2rem;
+      padding: 1rem 1.25rem;
+      background: #fff;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      line-height: 1.5;
+    }
+    .instructions code {
+      background: #eef2ff;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+    }
+    .stage {
+      position: relative;
+      width: min(520px, 100%);
+      height: 320px;
+      margin: 0 auto;
+    }
+    .back-card {
+      position: absolute;
+      inset: 24px;
+      background: #dbeafe;
+      border: 3px solid #2563eb;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+    .middle-card {
+      position: absolute;
+      top: 72px;
+      left: 72px;
+      right: 72px;
+      bottom: 72px;
+      background: #fef3c7;
+      border: 3px solid #d97706;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #92400e;
+    }
+    .front-chip {
+      position: absolute;
+      top: 120px;
+      left: 140px;
+      width: 180px;
+      height: 100px;
+      background: #fee2e2;
+      border: 3px solid #dc2626;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #991b1b;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    }
+    .front-image {
+      position: absolute;
+      top: 96px;
+      left: 220px;
+      width: 140px;
+      height: 140px;
+      object-fit: cover;
+      border: 3px solid #059669;
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+    }
+    .legend {
+      max-width: 42rem;
+      margin: 2rem auto 0;
+      display: grid;
+      gap: 0.5rem;
+    }
+    .legend div {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .swatch {
+      width: 1rem;
+      height: 1rem;
+      border-radius: 3px;
+      border: 2px solid #111;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Deep select test page</h1>
+  <div class="instructions">
+    <p>Press <code>C</code> in Drawbridge, then hover the stacked area below.</p>
+    <p><strong>Ctrl+Click</strong> drills one layer deeper. <strong>Click</strong> (no Ctrl) opens the comment on the highlighted element.</p>
+  </div>
+
+  <div class="stage" id="stack-stage">
+    <div class="back-card" data-layer="1">Back card (blue)</div>
+    <div class="middle-card" data-layer="2">Middle card (amber)</div>
+    <div class="front-chip" data-layer="3">Front chip (red)</div>
+    <img
+      class="front-image"
+      data-layer="4"
+      alt="Front image"
+      src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Crect width='140' height='140' fill='%2310b981'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-size='14' font-weight='700'%3EFront image%3C/text%3E%3C/svg%3E"
+    />
+  </div>
+
+  <div class="legend">
+    <div><span class="swatch" style="background:#059669"></span> Top layer: image</div>
+    <div><span class="swatch" style="background:#dc2626"></span> Layer 2: red chip</div>
+    <div><span class="swatch" style="background:#d97706"></span> Layer 3: amber card</div>
+    <div><span class="swatch" style="background:#2563eb"></span> Layer 4: blue card</div>
+  </div>
+</body>
+</html>

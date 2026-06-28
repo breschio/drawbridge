@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Drawbridge - Visual editor for AI coding assistants",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Send comments and screenshots directly to Cursor and Claude Code as prompts.",
   "permissions": [
     "activeTab",
@@ -24,6 +24,8 @@
         "html2canvas.min.js",
         "utils/safeStorage.js",
         "utils/persistence.js",
+        "utils/buildInfo.js",
+        "utils/elementPicker.js",
         "utils/taskStore.js",
         "utils/markdownGenerator.js",
         "utils/migrateLegacyFiles.js",
