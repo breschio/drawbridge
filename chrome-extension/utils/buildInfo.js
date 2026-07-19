@@ -1,5 +1,5 @@
 // Shared build id — keep DRAWBRIDGE_FEATURE_BUILD in sync across content + background
-const DRAWBRIDGE_FEATURE_BUILD = 'deep-select-v1';
+const DRAWBRIDGE_FEATURE_BUILD = 'deep-select-v2';
 
 function getContentScriptBuild(manifestVersion) {
   return `${manifestVersion}-${DRAWBRIDGE_FEATURE_BUILD}`;

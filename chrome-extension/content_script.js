@@ -48,6 +48,8 @@
   let lastPointer = { x: 0, y: 0 };
   let drilledOnPointerdown = false;
   let deepSelectBadge = null;
+  // Track Control via keydown — macOS Ctrl+Click becomes right-click and drops ctrlKey.
+  let controlKeyHeld = false;
   let lastTopPickElement = null;
   let projectRoot = null;
   let markdownFileHandle = null; // Handle for moat-tasks.md
@@ -3765,16 +3767,65 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     return window.MoatElementPicker;
   }
 
+  function setControlKeyHeld(held) {
+    controlKeyHeld = !!held;
+  }
+
   function isDeepSelectModifier(event) {
-    if (!event) {
-      return false;
+    const pickerApi = getElementPicker();
+    if (pickerApi && typeof pickerApi.isDeepSelectControlActive === 'function') {
+      return pickerApi.isDeepSelectControlActive(event, controlKeyHeld);
     }
+    // Fallback if picker script failed to inject
     return !!(
-      event.ctrlKey ||
-      event.metaKey ||
-      (event.getModifierState && (event.getModifierState('Control') || event.getModifierState('Meta')))
+      controlKeyHeld ||
+      (event &&
+        (event.ctrlKey ||
+          (event.getModifierState && event.getModifierState('Control'))))
     );
   }
+
+  // Capture Control held-state before OS remaps Ctrl+Click on macOS/Linux.
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      const pickerApi = getElementPicker();
+      if (pickerApi && typeof pickerApi.isControlKeyEvent === 'function') {
+        if (pickerApi.isControlKeyEvent(e)) {
+          setControlKeyHeld(true);
+        }
+        return;
+      }
+      if (e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        setControlKeyHeld(true);
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    'keyup',
+    (e) => {
+      const pickerApi = getElementPicker();
+      if (pickerApi && typeof pickerApi.isControlKeyEvent === 'function') {
+        if (pickerApi.isControlKeyEvent(e)) {
+          setControlKeyHeld(false);
+        }
+        return;
+      }
+      if (e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        setControlKeyHeld(false);
+      }
+    },
+    true
+  );
+
+  window.addEventListener('blur', () => setControlKeyHeld(false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') {
+      setControlKeyHeld(false);
+    }
+  });
 
   function removeDeepSelectBadge() {
     if (deepSelectBadge) {
@@ -4154,6 +4205,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     if (isDeepSelectModifier(e)) {
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
       if (drilledOnPointerdown) {
         drilledOnPointerdown = false;
         return;
@@ -4171,7 +4223,31 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     createCommentBox(target, e.clientX, e.clientY);
   }, true);
 
-  // Pointerdown: Ctrl+Click drills; otherwise swallow press for page UI libraries
+  // macOS: Ctrl+Click is remapped to contextmenu / secondary click.
+  // Catch it here using controlKeyHeld (event.ctrlKey is often false).
+  document.addEventListener(
+    'contextmenu',
+    (e) => {
+      if (!commentMode || commentBox) return;
+      if (isEventInMoatUI(e)) return;
+      if (!isDeepSelectModifier(e)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      lastPointer = { x: e.clientX, y: e.clientY };
+
+      if (drilledOnPointerdown) {
+        drilledOnPointerdown = false;
+        return;
+      }
+      handleDeepSelectDrill();
+    },
+    true
+  );
+
+  // Pointerdown: Ctrl+Click drills (Win/Linux + Mac with held-state); else swallow press
   document.addEventListener('pointerdown', (e) => {
     if (!commentMode || commentBox) return;
     if (isEventInMoatUI(e)) return;
@@ -4180,8 +4256,14 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+      lastPointer = { x: e.clientX, y: e.clientY };
       handleDeepSelectDrill();
       drilledOnPointerdown = true;
+      return;
+    }
+
+    // Ignore non-primary buttons when not deep-selecting (e.g. two-finger right-click)
+    if (typeof e.button === 'number' && e.button !== 0) {
       return;
     }
 
@@ -4193,6 +4275,15 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   document.addEventListener('mouseup', (e) => {
     if (!commentMode) return;
     if (isEventInMoatUI(e)) return;
+    if (isDeepSelectModifier(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (typeof e.button === 'number' && e.button !== 0) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -4278,7 +4369,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         if (!hasPressedC) {
           hasPressedC = true;
           // Show the click instruction notification
-          showNotification('Click anywhere to comment', 'info', 'click-instruction');
+          showNotification('Click to comment · Ctrl+Click deep select', 'info', 'click-instruction');
         }
         
         enterCommentMode();
@@ -4686,7 +4777,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       if (!hasPressedC) {
         hasPressedC = true;
         // Show the click instruction notification
-        showNotification('Click anywhere to comment', 'info', 'click-instruction');
+        showNotification('Click to comment · Ctrl+Click deep select', 'info', 'click-instruction');
       }
       
       // Enter comment mode

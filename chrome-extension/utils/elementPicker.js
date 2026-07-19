@@ -121,6 +121,46 @@ function pickElementAtPoint(x, y, depthIndex, doc = document) {
   };
 }
 
+/**
+ * Physical Control key (not Cmd/Meta). Used on Win/Linux/macOS.
+ * @param {KeyboardEvent|null|undefined} event
+ * @returns {boolean}
+ */
+function isControlKeyEvent(event) {
+  if (!event) {
+    return false;
+  }
+  return (
+    event.key === 'Control' ||
+    event.code === 'ControlLeft' ||
+    event.code === 'ControlRight'
+  );
+}
+
+/**
+ * Deep select uses Control on every OS.
+ * macOS remaps Ctrl+Click → right-click and often clears event.ctrlKey,
+ * so callers must also pass a keydown-tracked `controlHeld` flag.
+ * @param {MouseEvent|PointerEvent|KeyboardEvent|null|undefined} event
+ * @param {boolean} [controlHeld=false]
+ * @returns {boolean}
+ */
+function isDeepSelectControlActive(event, controlHeld = false) {
+  if (controlHeld) {
+    return true;
+  }
+  if (!event) {
+    return false;
+  }
+  if (event.ctrlKey) {
+    return true;
+  }
+  if (typeof event.getModifierState === 'function' && event.getModifierState('Control')) {
+    return true;
+  }
+  return false;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SKIP_TAGS,
@@ -130,7 +170,9 @@ if (typeof module !== 'undefined' && module.exports) {
     filterPickableStack,
     normalizeDepthIndex,
     cycleDepthIndex,
-    pickElementAtPoint
+    pickElementAtPoint,
+    isControlKeyEvent,
+    isDeepSelectControlActive
   };
 } else {
   window.MoatElementPicker = {
@@ -140,6 +182,8 @@ if (typeof module !== 'undefined' && module.exports) {
     filterPickableStack,
     normalizeDepthIndex,
     cycleDepthIndex,
-    pickElementAtPoint
+    pickElementAtPoint,
+    isControlKeyEvent,
+    isDeepSelectControlActive
   };
 }

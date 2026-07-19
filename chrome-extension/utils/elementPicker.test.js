@@ -4,7 +4,9 @@ const {
   filterPickableStack,
   normalizeDepthIndex,
   cycleDepthIndex,
-  pickElementAtPoint
+  pickElementAtPoint,
+  isControlKeyEvent,
+  isDeepSelectControlActive
 } = require('./elementPicker.js');
 
 function mockElement(tag, options = {}) {
@@ -70,5 +72,25 @@ describe('elementPicker', () => {
     expect(pickElementAtPoint(10, 10, 1, doc).element).toBe(middle);
     expect(pickElementAtPoint(10, 10, 2, doc).element).toBe(bottom);
     expect(pickElementAtPoint(10, 10, 0, doc).total).toBe(3);
+  });
+
+  test('isControlKeyEvent matches physical Control only', () => {
+    expect(isControlKeyEvent({ key: 'Control', code: 'ControlLeft' })).toBe(true);
+    expect(isControlKeyEvent({ key: 'Control', code: 'ControlRight' })).toBe(true);
+    expect(isControlKeyEvent({ key: 'Meta', code: 'MetaLeft' })).toBe(false);
+    expect(isControlKeyEvent({ key: 'c', code: 'KeyC', ctrlKey: true })).toBe(false);
+  });
+
+  test('isDeepSelectControlActive uses held flag when macOS clears ctrlKey', () => {
+    // Simulated macOS remapped Ctrl+Click: secondary button, ctrlKey false
+    const remappedClick = { ctrlKey: false, button: 2, getModifierState: () => false };
+    expect(isDeepSelectControlActive(remappedClick, false)).toBe(false);
+    expect(isDeepSelectControlActive(remappedClick, true)).toBe(true);
+
+    // Win/Linux normal Ctrl+Click
+    expect(isDeepSelectControlActive({ ctrlKey: true }, false)).toBe(true);
+
+    // Cmd alone must not deep-select
+    expect(isDeepSelectControlActive({ ctrlKey: false, metaKey: true }, false)).toBe(false);
   });
 });
