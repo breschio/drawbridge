@@ -14,8 +14,12 @@
   const __moatNodeSelector = '[id^="moat-"],[class*="moat"],[class*="float-comment"]';
   for (const __type of ['focusin', 'focusout']) {
     document.addEventListener(__type, (e) => {
-      const t = e.target;
-      if (t instanceof Element && t.closest(__moatNodeSelector)) {
+      const isDrawbridgeNode = (node) =>
+        node instanceof Element && !!node.closest(__moatNodeSelector);
+      // focusout originates on the host input when focus enters our editor.
+      // Traps inspect relatedTarget and can reclaim focus before focusin fires.
+      if (isDrawbridgeNode(e.target) ||
+          (__type === 'focusout' && isDrawbridgeNode(e.relatedTarget))) {
         e.stopImmediatePropagation();
       }
     }, true);
