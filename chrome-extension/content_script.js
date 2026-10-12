@@ -1,9 +1,43 @@
 // Moat Chrome Extension - Content Script
 (function() {
-  if (window.__drawbridgeContentScriptLoaded) {
+  const contentScriptBuild = DrawbridgeBuildInfo.getContentScriptBuild(
+    chrome.runtime.getManifest().version
+  );
+
+  if (window.__drawbridgeContentScriptBuild === contentScriptBuild) {
     return;
   }
+
+  if (window.__drawbridgeContentScriptLoaded) {
+    // An older build is already live in this page. Its event handlers cannot be
+    // swapped out in place, so reload once to load the fresh code instead of
+    // silently running stale handlers. The per-build sessionStorage flag makes
+    // this a single reload and guards against any reload loop.
+    const RELOAD_FLAG = '__drawbridgeReloadedForBuild';
+    try {
+      if (sessionStorage.getItem(RELOAD_FLAG) !== contentScriptBuild) {
+        sessionStorage.setItem(RELOAD_FLAG, contentScriptBuild);
+        console.warn(
+          '[Drawbridge] New build (%s) detected; reloading page to apply it.',
+          contentScriptBuild
+        );
+        location.reload();
+        return;
+      }
+    } catch (e) {
+      // sessionStorage may be unavailable (sandboxed frames); fall through.
+    }
+
+    window.__drawbridgeNeedsRefresh = true;
+    console.warn(
+      '[Drawbridge] Extension updated (%s). Refresh this page (Ctrl+Shift+R) to enable deep select.',
+      contentScriptBuild
+    );
+    return;
+  }
+
   window.__drawbridgeContentScriptLoaded = true;
+  window.__drawbridgeContentScriptBuild = contentScriptBuild;
 
   // Host-app modals with a focus trap (e.g. Radix Dialog / focus-lock) reclaim focus
   // whenever it leaves their subtree. Drawbridge's inputs live at <body> level (light DOM),
@@ -29,6 +63,14 @@
   let hoveredElement = null;
   let commentBox = null;
   let highlightedElement = null;
+  let deepSelectIndex = 0;
+  let pickStack = [];
+  let lastPointer = { x: 0, y: 0 };
+  let drilledOnPointerdown = false;
+  let deepSelectBadge = null;
+  // Track Control via keydown — macOS Ctrl+Click becomes right-click and drops ctrlKey.
+  let controlKeyHeld = false;
+  let lastTopPickElement = null;
   let projectRoot = null;
   let markdownFileHandle = null; // Handle for moat-tasks.md
 
@@ -3528,6 +3570,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
 
   // Enter comment mode
   function enterCommentMode() {
+    if (window.__drawbridgeNeedsRefresh) {
+      showNotification('Refresh page (Ctrl+Shift+R) for latest Drawbridge', 'error');
+      return;
+    }
     commentMode = true;
     document.body.classList.add('float-comment-mode');
   }
@@ -3536,6 +3582,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   function exitCommentMode() {
     commentMode = false;
     document.body.classList.remove('float-comment-mode');
+    deepSelectIndex = 0;
+    pickStack = [];
+    lastTopPickElement = null;
+    removeDeepSelectBadge();
     
     // Remove DOM overlay from the element
     if (commentBox && commentBox.highlightOverlay) {
@@ -3868,24 +3918,178 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   // Global hover overlay element
   let hoverOverlay = null;
 
+  function getElementPicker() {
+    return window.MoatElementPicker;
+  }
+
+  function setControlKeyHeld(held) {
+    controlKeyHeld = !!held;
+  }
+
+  function isDeepSelectModifier(event) {
+    const pickerApi = getElementPicker();
+    if (pickerApi && typeof pickerApi.isDeepSelectControlActive === 'function') {
+      return pickerApi.isDeepSelectControlActive(event, controlKeyHeld);
+    }
+    // Fallback if picker script failed to inject
+    return !!(
+      controlKeyHeld ||
+      (event &&
+        (event.ctrlKey ||
+          (event.getModifierState && event.getModifierState('Control'))))
+    );
+  }
+
+  // Capture Control held-state before OS remaps Ctrl+Click on macOS/Linux.
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      const pickerApi = getElementPicker();
+      if (pickerApi && typeof pickerApi.isControlKeyEvent === 'function') {
+        if (pickerApi.isControlKeyEvent(e)) {
+          setControlKeyHeld(true);
+        }
+        return;
+      }
+      if (e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        setControlKeyHeld(true);
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    'keyup',
+    (e) => {
+      const pickerApi = getElementPicker();
+      if (pickerApi && typeof pickerApi.isControlKeyEvent === 'function') {
+        if (pickerApi.isControlKeyEvent(e)) {
+          setControlKeyHeld(false);
+        }
+        return;
+      }
+      if (e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        setControlKeyHeld(false);
+      }
+    },
+    true
+  );
+
+  window.addEventListener('blur', () => setControlKeyHeld(false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') {
+      setControlKeyHeld(false);
+    }
+  });
+
+  function removeDeepSelectBadge() {
+    if (deepSelectBadge) {
+      deepSelectBadge.remove();
+      deepSelectBadge = null;
+    }
+    document.body.classList.remove('float-deep-select-active');
+  }
+
+  function updateDeepSelectBadge(depth, total, x, y, show) {
+    removeDeepSelectBadge();
+    if (!show || total <= 1) {
+      return;
+    }
+
+    deepSelectBadge = document.createElement('div');
+    deepSelectBadge.className = 'float-deep-select-badge';
+    deepSelectBadge.textContent = `Layer ${depth}/${total}`;
+    deepSelectBadge.style.left = `${Math.min(x + 12, window.innerWidth - 120)}px`;
+    deepSelectBadge.style.top = `${Math.min(y + 12, window.innerHeight - 32)}px`;
+    document.body.appendChild(deepSelectBadge);
+    document.body.classList.add('float-deep-select-active');
+  }
+
+  function refreshPickAtPointer(clientX, clientY) {
+    const pickerApi = getElementPicker();
+    if (!pickerApi) {
+      return null;
+    }
+
+    lastPointer = { x: clientX, y: clientY };
+
+    const pick = pickerApi.pickElementAtPoint(clientX, clientY, deepSelectIndex);
+    pickStack = pick.stack;
+
+    if (!pick.element) {
+      hoveredElement = null;
+      removeHighlight();
+      removeDeepSelectBadge();
+      return null;
+    }
+
+    hoveredElement = pick.element;
+    const isDeep = deepSelectIndex > 0 && pick.total > 1;
+    highlightElement(pick.element, isDeep);
+    updateDeepSelectBadge(pick.depth, pick.total, clientX, clientY, isDeep);
+    return pick.element;
+  }
+
+  function drillDeeperAtPointer() {
+    const pickerApi = getElementPicker();
+    if (!pickerApi) {
+      console.warn('[Drawbridge] Deep select unavailable — MoatElementPicker missing. Refresh the page.');
+      showNotification('Refresh page for deep select', 'error');
+      return null;
+    }
+
+    // A tap or a click immediately after entering the mode may have no hover.
+    // Recompute the stack at the actual gesture coordinates before cycling.
+    refreshPickAtPointer(lastPointer.x, lastPointer.y);
+    if (pickStack.length <= 1) {
+      showNotification('Only one layer under cursor', 'info');
+      console.info('[Drawbridge] Deep select: single layer at pointer');
+      return null;
+    }
+
+    deepSelectIndex = pickerApi.cycleDepthIndex(deepSelectIndex, pickStack.length, 1);
+    const element = refreshPickAtPointer(lastPointer.x, lastPointer.y);
+    const pick = pickerApi.pickElementAtPoint(lastPointer.x, lastPointer.y, deepSelectIndex);
+
+    console.info(
+      '[Drawbridge] Deep select drill → layer',
+      pick.depth + '/' + pick.total,
+      pick.element?.tagName?.toLowerCase(),
+      pick.element?.className || pick.element?.id || ''
+    );
+    showNotification(`Layer ${pick.depth}/${pick.total} — click to comment`, 'info');
+
+    return element;
+  }
+
+  // Trackpads often skip pointerdown with ctrlKey; click may be the only signal.
+  // pointerdown+click from a mouse should drill only once per gesture.
+  function handleDeepSelectDrill() {
+    return drillDeeperAtPointer();
+  }
+
   // Highlight element on hover with DOM overlay
-  function highlightElement(element) {
+  function highlightElement(element, isDeepSelect = false) {
     removeHighlight();
     highlightedElement = element;
     
     // Create overlay div for both hover and click
     const rect = element.getBoundingClientRect();
     hoverOverlay = document.createElement('div');
-    hoverOverlay.className = 'float-hover-overlay';
+    hoverOverlay.className = isDeepSelect
+      ? 'float-hover-overlay float-hover-overlay-deep'
+      : 'float-hover-overlay';
+    const borderColor = isDeepSelect ? '#F59E0B' : '#3B82F6';
+    const bgColor = isDeepSelect ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.1)';
     hoverOverlay.style.cssText = `
       position: absolute;
       left: ${rect.x + window.scrollX}px;
       top: ${rect.y + window.scrollY}px;
       width: ${rect.width}px;
       height: ${rect.height}px;
-      border: 3px solid #3B82F6;
+      border: 3px solid ${borderColor};
       border-radius: 4px;
-      background-color: rgba(59, 130, 246, 0.1);
+      background-color: ${bgColor};
       pointer-events: none;
       z-index: 9998;
       box-sizing: border-box;
@@ -3928,14 +4132,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   // Mouse move handler
   document.addEventListener('mousemove', (e) => {
     if (!commentMode || commentBox) return; // Don't highlight if comment box is open
-    
-    const element = document.elementFromPoint(e.clientX, e.clientY);
-    
-    // Skip if element is the shadow host (moat UI container)
-    if (element && element.id === 'moat-shadow-host') {
-      return;
-    }
-    
+
     // Use composedPath() to properly detect if hovering over Shadow DOM elements
     const path = e.composedPath();
     const hoveringOverMoatUI = path.some(el => 
@@ -3945,10 +4142,18 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       )
     );
     
-    if (element && element !== hoveredElement && !hoveringOverMoatUI) {
-      hoveredElement = element;
-      highlightElement(element);
+    if (hoveringOverMoatUI) return;
+
+    const pickerApi = getElementPicker();
+    if (pickerApi) {
+      const topPick = pickerApi.pickElementAtPoint(e.clientX, e.clientY, 0);
+      if (topPick.element !== lastTopPickElement) {
+        deepSelectIndex = 0;
+        lastTopPickElement = topPick.element;
+      }
     }
+
+    refreshPickAtPointer(e.clientX, e.clientY);
   });
 
   // Drawing mode mouse handlers
@@ -4150,30 +4355,100 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     return false;
   }
 
-  // Click handler
+  // Click handler — plain click opens comment; Ctrl+Click drills (trackpad fallback)
   document.addEventListener('click', (e) => {
     if (!commentMode) return;
     if (isEventInMoatUI(e)) return;
 
+    if (isDeepSelectModifier(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (drilledOnPointerdown) {
+        drilledOnPointerdown = false;
+        return;
+      }
+      lastPointer = { x: e.clientX, y: e.clientY };
+      handleDeepSelectDrill();
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
 
-    createCommentBox(e.target, e.clientX, e.clientY);
+    // Resolve at click time, preserving the layer chosen with Control.
+    // Keyboard activation and touch need not produce a preceding mousemove.
+    const target = refreshPickAtPointer(e.clientX, e.clientY) || e.target;
+    if (!target) return;
+
+    createCommentBox(target, e.clientX, e.clientY);
   }, true);
 
-  // Suppress mousedown/pointerdown/mouseup in comment mode so floating-UI
-  // libraries (Radix, Headless UI, Floating UI) don't dismiss user panels via
-  // their outside-press detection before our click handler fires.
-  function swallowPress(e) {
-    if (!commentMode) return;
+  // macOS: Ctrl+Click is remapped to contextmenu / secondary click.
+  // Catch it here using controlKeyHeld (event.ctrlKey is often false).
+  document.addEventListener(
+    'contextmenu',
+    (e) => {
+      if (!commentMode || commentBox) return;
+      if (isEventInMoatUI(e)) return;
+      if (!isDeepSelectModifier(e)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      lastPointer = { x: e.clientX, y: e.clientY };
+
+      if (drilledOnPointerdown) {
+        drilledOnPointerdown = false;
+        return;
+      }
+      handleDeepSelectDrill();
+    },
+    true
+  );
+
+  // Pointerdown: Ctrl+Click drills (Win/Linux + Mac with held-state); else swallow press
+  document.addEventListener('pointerdown', (e) => {
+    if (!commentMode || commentBox) return;
     if (isEventInMoatUI(e)) return;
+
+    if (isDeepSelectModifier(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      lastPointer = { x: e.clientX, y: e.clientY };
+      handleDeepSelectDrill();
+      drilledOnPointerdown = true;
+      return;
+    }
+
+    // Ignore non-primary buttons when not deep-selecting (e.g. two-finger right-click)
+    if (typeof e.button === 'number' && e.button !== 0) {
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-  }
-  document.addEventListener('mousedown', swallowPress, true);
-  document.addEventListener('pointerdown', swallowPress, true);
-  document.addEventListener('mouseup', swallowPress, true);
+  }, true);
+
+  document.addEventListener('mouseup', (e) => {
+    if (!commentMode) return;
+    if (isEventInMoatUI(e)) return;
+    if (isDeepSelectModifier(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (typeof e.button === 'number' && e.button !== 0) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }, true);
 
   // Global variables for new notification system
   let hasPressedC = false;
@@ -4255,7 +4530,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         if (!hasPressedC) {
           hasPressedC = true;
           // Show the click instruction notification
-          showNotification('Click anywhere to comment', 'info', 'click-instruction');
+          showNotification('Click to comment · Ctrl+Click deep select', 'info', 'click-instruction');
         }
         
         enterCommentMode();
@@ -4603,7 +4878,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       sendResponse({
         success: true,
         ready: true,
-        moatLoaded: !!window.__drawbridgeMoatLoaded
+        moatLoaded: !!window.__drawbridgeMoatLoaded,
+        contentScriptBuild: window.__drawbridgeContentScriptBuild || null,
+        hasElementPicker: !!window.MoatElementPicker,
+        needsRefresh: !!window.__drawbridgeNeedsRefresh
       });
     } else if (request.action === 'toggleMoat') {
       window.dispatchEvent(new CustomEvent('moat:toggle-moat'));
@@ -4660,7 +4938,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       if (!hasPressedC) {
         hasPressedC = true;
         // Show the click instruction notification
-        showNotification('Click anywhere to comment', 'info', 'click-instruction');
+        showNotification('Click to comment · Ctrl+Click deep select', 'info', 'click-instruction');
       }
       
       // Enter comment mode
@@ -4683,4 +4961,11 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       console.log('🔧 Moat: Already in drawing mode or comment mode');
     }
   });
-})(); 
+
+  window.__drawbridgeDebug = {
+    build: contentScriptBuild,
+    hasElementPicker: !!window.MoatElementPicker,
+    deepSelect: true
+  };
+  console.info('[Drawbridge] Loaded', window.__drawbridgeDebug);
+})();
