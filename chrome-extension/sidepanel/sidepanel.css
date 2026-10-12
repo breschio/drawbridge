@@ -1,0 +1,628 @@
+/* Drawbridge Side Panel Styles */
+
+/* Theme Variables */
+:root,
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --text-muted: #9ca3af;
+  --accent: #3b82f6;
+  --accent-light: rgba(59, 130, 246, 0.1);
+  --accent-border: rgba(59, 130, 246, 0.2);
+  --success: #059669;
+  --success-light: rgba(34, 197, 94, 0.1);
+  --error: #dc2626;
+  --error-light: rgba(239, 68, 68, 0.1);
+  --warning: #d97706;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --shadow-lg: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --bg-tertiary: #374151;
+  --border: #374151;
+  --border-light: #4b5563;
+  --text-primary: #f9fafb;
+  --text-secondary: #e5e7eb;
+  --text-tertiary: #d1d5db;
+  --text-muted: #9ca3af;
+  --accent: #60a5fa;
+  --accent-light: rgba(96, 165, 250, 0.1);
+  --accent-border: rgba(96, 165, 250, 0.2);
+  --success: #10b981;
+  --success-light: rgba(16, 185, 129, 0.1);
+  --error: #f87171;
+  --error-light: rgba(248, 113, 113, 0.1);
+  --warning: #fbbf24;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --shadow-lg: rgba(0, 0, 0, 0.4);
+}
+
+/* Base */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#drawbridge-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+}
+
+.header-btn.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.header-btn:disabled,
+.connect-btn-primary:disabled,
+.project-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.header-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  padding: 12px 16px 8px;
+  gap: 4px;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+}
+
+.tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px var(--shadow);
+  font-weight: 600;
+}
+
+.badge {
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 16px;
+  text-align: center;
+  display: none;
+}
+
+.tab[data-status="to do"] .badge { background: #f59e0b; }
+.tab[data-status="doing"] .badge { background: #3b82f6; }
+.tab[data-status="done"] .badge { background: #10b981; }
+
+/* Connection Status (in header) */
+.connection-status {
+  display: flex;
+  align-items: center;
+}
+
+/* Disconnected state: show blue button only */
+.connect-btn-primary {
+  padding: 6px 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.connect-btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* Connected state: project button */
+.project-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.project-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-light);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.status-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
+}
+
+.project-btn .chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* State visibility */
+.connection-status.disconnected .connect-btn-primary {
+  display: block;
+}
+
+.connection-status.disconnected .project-btn {
+  display: none;
+}
+
+.connection-status.connected .connect-btn-primary {
+  display: none;
+}
+
+.connection-status.connected .project-btn {
+  display: flex;
+}
+
+/* Project menu positioning */
+.project-menu {
+  right: 56px;
+  left: auto;
+}
+
+.menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.disconnect-item:hover {
+  background: var(--error-light);
+  color: var(--error);
+}
+
+/* Task Container */
+.task-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 20px;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state .hint {
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* Task Card */
+.task-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  transition: all 0.2s;
+  min-height: 100px;
+}
+
+.task-card.status-to-do { border-left: 4px solid #f59e0b; }
+.task-card.status-doing { border-left: 4px solid #3b82f6; }
+.task-card.status-done { border-left: 4px solid #10b981; }
+.task-card.completed { opacity: 0.7; }
+
+/* Two-column layout */
+.task-layout {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  min-height: 84px;
+}
+
+.task-content-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.task-time {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  flex: 1;
+}
+
+.delete-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.task-card:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: var(--error-light);
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.delete-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.task-content {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.task-selector {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: auto;
+  align-self: flex-start;
+  max-width: 140px;
+}
+
+/* Thumbnail */
+.thumbnail-container {
+  position: relative;
+  width: 100px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: visible;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  align-self: stretch;
+}
+
+.thumbnail-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.thumbnail-delete-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
+.task-card:hover .thumbnail-delete-btn {
+  display: flex;
+}
+
+.thumbnail-delete-btn:hover {
+  background: var(--error-light);
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.thumbnail-delete-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Dropdown Menu */
+.dropdown-menu {
+  position: absolute;
+  top: 48px;
+  left: 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px var(--shadow);
+  z-index: 100;
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.dropdown-menu.hidden {
+  display: none;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
+  text-align: left;
+  font-family: inherit;
+}
+
+.menu-item:hover {
+  background: var(--bg-secondary);
+}
+
+.menu-item.active {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.menu-item.active .shortcut {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.menu-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.shortcut {
+  margin-left: auto;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* Notifications */
+.notification-container {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.notification {
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px var(--shadow);
+  animation: slideUp 0.3s ease;
+  pointer-events: auto;
+}
+
+.notification.success {
+  background: var(--success-light);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.notification.error {
+  background: var(--error-light);
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.notification.removing {
+  animation: slideDown 0.3s ease forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+/* Scrollbar */
+.task-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.task-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.task-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.task-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

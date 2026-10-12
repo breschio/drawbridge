@@ -21,12 +21,14 @@ function loadBackground({ sendMessage, insertCSS, executeScript } = {}) {
   require('./utils/buildInfo.js');
 
   global.chrome = {
+    sidePanel: { open: jest.fn(async () => {}) },
     action: {
       onClicked: {
         addListener: jest.fn()
       }
     },
     runtime: {
+      sendMessage: jest.fn(async () => {}),
       lastError: null,
       getManifest: jest.fn(() => manifest),
       onMessage: {
@@ -67,7 +69,7 @@ describe('background action click handling', () => {
     delete global.chrome;
   });
 
-  test('toggles immediately when the content script is already ready', async () => {
+  test('opens the panel before checking content readiness', async () => {
     const sendMessage = jest.fn((tabId, message, callback) => {
       if (message.action === 'ping') {
         callback(getReadyPing());
@@ -80,12 +82,13 @@ describe('background action click handling', () => {
 
     await handleActionClick({ id: 7, url: 'https://example.com/' });
 
-    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'toggleMoat']);
+    expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping']);
     expect(chrome.scripting.insertCSS).not.toHaveBeenCalled();
     expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
   });
 
-  test('injects manifest content scripts before toggling when the active tab has no receiver', async () => {
+  test('injects manifest content scripts when the active tab has no receiver', async () => {
     let pingCount = 0;
     const sendMessage = jest.fn((tabId, message, callback) => {
       if (message.action === 'ping') {
@@ -114,17 +117,17 @@ describe('background action click handling', () => {
       target: { tabId: 7 },
       files: manifest.content_scripts[0].js
     }, expect.any(Function));
-    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping', 'toggleMoat']);
+    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping']);
   });
 
-  test('injects full manifest when moat has not loaded yet', async () => {
+  test('injects full manifest when the content script is not ready', async () => {
     let pingCount = 0;
     const sendMessage = jest.fn((tabId, message, callback) => {
       if (message.action === 'ping') {
         pingCount += 1;
         callback({
           ...getReadyPing(),
-          moatLoaded: pingCount > 1
+          ready: pingCount > 1
         });
         return;
       }
@@ -143,7 +146,7 @@ describe('background action click handling', () => {
       target: { tabId: 7 },
       files: manifest.content_scripts[0].js
     }, expect.any(Function));
-    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping', 'toggleMoat']);
+    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping']);
   });
 
   test('injects full manifest when content script build is stale', async () => {
@@ -170,7 +173,7 @@ describe('background action click handling', () => {
       target: { tabId: 7 },
       files: manifest.content_scripts[0].js
     }, expect.any(Function));
-    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping', 'toggleMoat']);
+    expect(sendMessage.mock.calls.map(call => call[1].action)).toEqual(['ping', 'ping']);
   });
 
   test('does nothing on restricted pages', async () => {
@@ -184,7 +187,7 @@ describe('background action click handling', () => {
     expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
   });
 
-  test('does not toggle when fallback injection fails', async () => {
+  test('reports fallback injection failure', async () => {
     const sendMessage = jest.fn((tabId, message, callback) => {
       if (message.action === 'ping') {
         failNextChromeCallback('Could not establish connection. Receiving end does not exist.', callback);
@@ -207,4 +210,13 @@ describe('background action click handling', () => {
       'Cannot access contents of the page.'
     );
   });
+});
+
+
+test('relay stamps source tab and window from sender rather than payload', () => {
+  loadBackground();
+  const handler = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+  handler({ type: 'RELAY_TO_SIDEPANEL', payload: { type: 'TASKS_LOADED', tasks: [], sourceTabId: 99, sourceWindowId: 99 } }, { tab: { id: 7, windowId: 3 } }, () => {});
+  expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'TASKS_LOADED', tasks: [], sourceTabId: 7, sourceWindowId: 3 });
+  delete global.chrome;
 });

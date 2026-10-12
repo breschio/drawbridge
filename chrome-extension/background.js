@@ -81,35 +81,13 @@ async function injectManifestContentScripts(tabId) {
   }
 }
 
-async function injectMoatScript(tabId) {
-  const contentScript = getPrimaryContentScript();
-  const moatScript = contentScript.js?.find(file => file.endsWith('moat.js'));
-  const target = { tabId };
-
-  if (contentScript.css?.length) {
-    await runScriptingMethod('insertCSS', {
-      target,
-      files: contentScript.css
-    });
-  }
-
-  if (!moatScript) {
-    throw new Error('Could not find moat.js in manifest content scripts');
-  }
-
-  await runScriptingMethod('executeScript', {
-    target,
-    files: [moatScript]
-  });
-}
-
 function getExpectedContentScriptBuild() {
   const buildInfo = globalThis.DrawbridgeBuildInfo;
   return buildInfo.getContentScriptBuild(chrome.runtime.getManifest().version);
 }
 
 function needsManualInjection(pingResponse) {
-  if (!pingResponse?.ready || pingResponse.moatLoaded === false) {
+  if (!pingResponse?.ready) {
     return true;
   }
   if (pingResponse.contentScriptBuild !== getExpectedContentScriptBuild()) {
@@ -153,15 +131,16 @@ async function handleActionClick(tab) {
   }
 
   try {
+    // Open before any asynchronous work consumes the toolbar user gesture.
+    await chrome.sidePanel.open({ tabId: tab.id });
     await ensureContentScriptsReady(tab.id);
-    await sendTabMessage(tab.id, { action: 'toggleMoat' });
-    console.log('Drawbridge: Sidebar toggled successfully');
+    console.log('Drawbridge: Side panel opened');
   } catch (error) {
     console.warn('Drawbridge: Failed to open on this page:', error.message);
   }
 }
 
-// Handle extension icon click - toggle Drawbridge sidebar
+// Handle extension icon click - open the native side panel
 chrome.action.onClicked.addListener(handleActionClick);
 
 // Handle screenshot capture requests from content scripts
@@ -181,6 +160,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     );
     return true; // Required for async sendResponse
   }
+  if (message.type === 'RELAY_TO_SIDEPANEL' && sender.tab) {
+    // Stamp trusted routing metadata after the payload; the panel filters it.
+    chrome.runtime.sendMessage({
+      ...message.payload,
+      sourceTabId: sender.tab.id,
+      sourceWindowId: sender.tab.windowId
+    }).catch(() => {});
+  }
 });
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -191,7 +178,6 @@ if (typeof module !== 'undefined' && module.exports) {
     getExpectedContentScriptBuild,
     handleActionClick,
     ensureContentScriptsReady,
-    injectManifestContentScripts,
-    injectMoatScript
+    injectManifestContentScripts
   };
 }

@@ -651,4 +651,4 @@ if (typeof module !== 'undefined' && module.exports) {
         validateTaskObject,
         sortTasksByTimestamp
     };
-} 
+}

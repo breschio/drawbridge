@@ -3,33 +3,6 @@
   function qs(sel) { return document.querySelector(sel); }
   function qsa(sel) { return Array.from(document.querySelectorAll(sel)); }
 
-  // Typewriter effect for Awesomeness title
-  function initTypewriter() {
-    const titleEl = qs('#awesomeness-title');
-    if (!titleEl) return;
-
-    const text = 'Awesomeness';
-    titleEl.textContent = '';
-    titleEl.classList.remove('typing-complete');
-
-    let index = 0;
-    function typeChar() {
-      if (index < text.length) {
-        titleEl.textContent += text[index];
-        index++;
-        setTimeout(typeChar, 100); // 100ms delay between characters
-      } else {
-        // Typing complete, add glow effect
-        titleEl.classList.add('typing-complete');
-      }
-    }
-
-    // Start typing after a short delay
-    setTimeout(typeChar, 300);
-  }
-
-  // Initialize typewriter on page load
-  window.addEventListener('load', initTypewriter);
 
   // Button demo: toggle color + wiggle card slightly
   const bugButton = qs('#bug-button');

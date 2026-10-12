@@ -113,26 +113,10 @@ img { display: block; max-width: 100%; }
   display: none;
 }
 .section-head h2.typewriter-text.typing-complete {
-  animation: glow 2s ease-in-out infinite;
-  text-shadow: 0 0 10px rgba(22, 163, 74, 0.5),
-               0 0 20px rgba(22, 163, 74, 0.3),
-               0 0 30px rgba(22, 163, 74, 0.2);
 }
 @keyframes blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
-}
-@keyframes glow {
-  0%, 100% {
-    text-shadow: 0 0 10px rgba(22, 163, 74, 0.5),
-                 0 0 20px rgba(22, 163, 74, 0.3),
-                 0 0 30px rgba(22, 163, 74, 0.2);
-  }
-  50% {
-    text-shadow: 0 0 20px rgba(22, 163, 74, 0.8),
-                 0 0 30px rgba(22, 163, 74, 0.6),
-                 0 0 40px rgba(22, 163, 74, 0.4);
-  }
 }
 .section-head p { color: var(--muted); }
 .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: start; }
@@ -146,9 +130,19 @@ img { display: block; max-width: 100%; }
   display: inline-block;
   font-size: 0;
 }
+.feature-card .icon {
+  margin-bottom: 8px;
+  text-align: left;
+  line-height: 1;
+}
+.feature-card .icon svg {
+  width: 32px;
+  height: 32px;
+  fill: var(--brand);
+}
 .feature-card h3 { margin: 10px 0 6px; font-size: 18px; letter-spacing: 0.01em; }
 .feature-card.bumped { margin-top: 0; /* aligned to top */ }
-.feature-card.alt-accent { border-color: var(--brand-alt); }
+.feature-card.alt-accent { border: none; }
 
 /* Example */
 .example { padding: 46px 0; background: #fafafa; border-top: 1px solid var(--border); }
@@ -179,7 +173,9 @@ img { display: block; max-width: 100%; }
 
 /* Pricing */
 .pricing { padding: 44px 0 60px; }
-.pricing-card { max-width: 420px; margin: 0 auto; border: 1px solid var(--border); border-radius: 16px; padding: 18px; background: #fff; box-shadow: 0 10px 26px var(--shadow); text-align: center; }
+.pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; }
+.pricing-card { border: 1px solid var(--border); border-radius: 16px; padding: 18px; background: #fff; box-shadow: 0 10px 26px var(--shadow); text-align: center; }
+.pricing-card.featured { border-color: var(--brand); box-shadow: 0 15px 35px rgba(22, 163, 74, 0.2); }
 .price { font-size: 34px; margin: 8px 0 6px; }
 .price span { color: var(--muted); font-size: 16px; }
 .list { list-style: none; padding: 0; margin: 12px 0 16px; text-align: left; }
