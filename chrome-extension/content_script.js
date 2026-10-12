@@ -420,14 +420,15 @@
 
   // Save clipboard-pasted reference images to ./screenshots and return their paths.
   async function savePastedImagesToFiles(annotation) {
-    if (!annotation.pastedImages?.length || !window.directoryHandle) {
-      return [];
+    if (!annotation.pastedImages?.length) return [];
+    if (!window.directoryHandle) {
+      throw new Error('Connect a project before saving pasted images.');
     }
     const screenshotsDir = await window.directoryHandle.getDirectoryHandle('screenshots', { create: true });
     const paths = [];
     for (let i = 0; i < annotation.pastedImages.length; i++) {
       const match = /^data:(image\/[\w.+-]+);base64,(.*)$/s.exec(annotation.pastedImages[i]);
-      if (!match) continue;
+      if (!match) throw new Error('A pasted image could not be read. Remove it and paste it again.');
       const [, mime, base64] = match;
       const ext = mime.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
@@ -440,9 +441,29 @@
         paths.push(`./screenshots/${fileName}`);
       } catch (error) {
         console.error('Moat: Failed to save pasted image:', error);
+        throw error;
       }
     }
     return paths;
+  }
+
+  // Keep the editor and its images available when any part of the save fails.
+  async function submitCommentAnnotation(box, annotation) {
+    if (box.isSubmitting) return false;
+    box.isSubmitting = true;
+    const submit = box.querySelector('.float-comment-submit');
+    submit.disabled = true;
+    try {
+      await addToQueue(annotation);
+      return true;
+    } catch (error) {
+      console.error('Moat: Annotation save failed:', error);
+      showNotification(`Could not save annotation: ${error.message} Your comment and images are still here; retry when ready.`, 'error');
+      return false;
+    } finally {
+      box.isSubmitting = false;
+      submit.disabled = false;
+    }
   }
 
   // Wire clipboard-image paste onto a comment box's textarea: store image data
@@ -3384,6 +3405,8 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Handle submit
     const handleSubmit = async () => {
+      const box = commentBox;
+      if (!box || box.isSubmitting) return;
       const content = textarea.value.trim()
         || (commentBox.pastedImages?.length ? 'See pasted reference image(s).' : '');
       if (!content) return;
@@ -3425,7 +3448,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         timestamp: Date.now(),
         sessionId: sessionId,
         status: "to do",
-        id: `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        id: box.annotationId || (box.annotationId = `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
       };
       
       // Use pre-captured screenshot (captured when comment box was created)
@@ -3437,14 +3460,11 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         console.log('⚠️ Moat: No pre-captured screenshot available');
       }
       
-      // Remove DOM overlay after submission
-      if (commentBox.highlightOverlay) {
-        commentBox.highlightOverlay.remove();
-        hoverOverlay = null;
-      }
-      
-      annotation.pastedImages = commentBox.pastedImages || [];
-      addToQueue(annotation);
+      annotation.pastedImages = [...box.pastedImages];
+      if (!await submitCommentAnnotation(box, annotation)) return;
+      if (commentBox !== box) return;
+
+      // Dismiss only after the annotation has been saved or queued.
       exitCommentMode();
     };
     
@@ -3731,6 +3751,8 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Handle submit
     const handleSubmit = async () => {
+      const box = commentBox;
+      if (!box || box.isSubmitting) return;
       const content = textarea.value.trim()
         || (commentBox.pastedImages?.length ? 'See pasted reference image(s).' : '');
       if (!content) return;
@@ -3768,7 +3790,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         timestamp: Date.now(),
         sessionId: sessionId,
         status: "to do",
-        id: `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        id: box.annotationId || (box.annotationId = `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
       };
       
       // Use pre-captured screenshot
@@ -3778,6 +3800,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         console.log('✅ Moat: Using pre-captured screenshot with rectangle');
       }
       
+      annotation.pastedImages = [...box.pastedImages];
+      if (!await submitCommentAnnotation(box, annotation)) return;
+      if (commentBox !== box) return;
+
       // Clear canvas after submission
       if (drawingCtx && drawingCanvas) {
         drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
@@ -3787,8 +3813,6 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       exitDrawingMode();
       removeDrawingCanvas();
       
-      annotation.pastedImages = commentBox.pastedImages || [];
-      addToQueue(annotation);
       removeCommentBox();
     };
     
