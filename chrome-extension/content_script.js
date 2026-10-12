@@ -3883,6 +3883,9 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       return null;
     }
 
+    // A tap or a click immediately after entering the mode may have no hover.
+    // Recompute the stack at the actual gesture coordinates before cycling.
+    refreshPickAtPointer(lastPointer.x, lastPointer.y);
     if (pickStack.length <= 1) {
       showNotification('Only one layer under cursor', 'info');
       console.info('[Drawbridge] Deep select: single layer at pointer');
@@ -4210,6 +4213,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         drilledOnPointerdown = false;
         return;
       }
+      lastPointer = { x: e.clientX, y: e.clientY };
       handleDeepSelectDrill();
       return;
     }
@@ -4217,7 +4221,9 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     e.preventDefault();
     e.stopPropagation();
 
-    const target = highlightedElement;
+    // Resolve at click time, preserving the layer chosen with Control.
+    // Keyboard activation and touch need not produce a preceding mousemove.
+    const target = refreshPickAtPointer(e.clientX, e.clientY) || e.target;
     if (!target) return;
 
     createCommentBox(target, e.clientX, e.clientY);
