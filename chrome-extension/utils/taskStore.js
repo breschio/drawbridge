@@ -49,6 +49,11 @@ function createTaskObject(taskData) {
         timestamp: Date.now()
     };
 
+    // Preserve pasted clipboard reference image paths, if any
+    if (taskData.attachments?.length) {
+        task.attachments = taskData.attachments;
+    }
+
     // Preserve bounding box data for freeform rectangles
     if (taskData.boundingBox) {
         task.boundingBox = taskData.boundingBox;
@@ -170,6 +175,7 @@ class TaskStore {
                     selector: taskData.selector || existingTask.selector,
                     boundingRect: taskData.boundingRect || existingTask.boundingRect,
                     screenshotPath: taskData.screenshotPath || existingTask.screenshotPath,
+                    attachments: taskData.attachments || existingTask.attachments,
                     lastModified: Date.now()
                 });
                 console.log(`Updated existing task: ${existingTask.id}`);

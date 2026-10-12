@@ -155,6 +155,7 @@ The `.json` file is the primary source of truth for all task information. You mu
 -   `selector`: The precise CSS selector for the target element.
 -   `title`, `boundingRect`: Context for locating the element.
 -   `screenshotPath`: Path to the screenshot showing the user's annotation context.
+-   `attachments`: Optional paths to reference images the user pasted from the clipboard (e.g. a target design/mockup). Open each one before implementing, just like the screenshot.
 
 ### Task Dependency Detection
 
@@ -228,6 +229,8 @@ Result: Task 1 must complete before Tasks 2 & 3
     -   Visual context and surrounding elements  
     -   Current state vs desired state
     -   Layout and positioning context
+
+    **Pasted reference images**: If the task JSON has an `attachments` array, read each listed image as well. These are references the user pasted from their clipboard (a target design, an example to match) and must inform the implementation alongside the screenshot.
 
 3.  **Screenshot Missing/Inaccessible**:
     ```

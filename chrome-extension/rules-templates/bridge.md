@@ -43,6 +43,7 @@ Files to read:
    - `comment`: User's instruction
    - `selector`: CSS selector for target element
    - `screenshotPath`: Visual context (resolve `./screenshots/` to `.moat/screenshots/`)
+   - `attachments`: Optional paths to reference images the user pasted from the clipboard — open each one (resolve `./screenshots/` the same way) before implementing, just like the screenshot
    - `status`: Current task status ("to do", "doing", "done")
 
 2. **Analyze Dependencies**: Before starting, check if tasks reference each other:
