@@ -5,6 +5,26 @@
   }
   window.__drawbridgeContentScriptLoaded = true;
 
+  // Host-app modals with a focus trap (e.g. Radix Dialog / focus-lock) reclaim focus
+  // whenever it leaves their subtree. Drawbridge's inputs live at <body> level (light DOM),
+  // so the trap steals focus the instant you click the comment box -> you can't type.
+  // Fix: capture-phase guard that stops focus events on Drawbridge nodes from reaching the
+  // app's document-level handlers. Capture runs before the app's bubble-phase focusin handler,
+  // and we only stop events originating inside Drawbridge UI, so the app's own focus is untouched.
+  const __moatNodeSelector = '[id^="moat-"],[class*="moat"],[class*="float-comment"]';
+  for (const __type of ['focusin', 'focusout']) {
+    document.addEventListener(__type, (e) => {
+      const isDrawbridgeNode = (node) =>
+        node instanceof Element && !!node.closest(__moatNodeSelector);
+      // focusout originates on the host input when focus enters our editor.
+      // Traps inspect relatedTarget and can reclaim focus before focusin fires.
+      if (isDrawbridgeNode(e.target) ||
+          (__type === 'focusout' && isDrawbridgeNode(e.relatedTarget))) {
+        e.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
   let commentMode = false;
   let hoveredElement = null;
   let commentBox = null;
