@@ -200,7 +200,7 @@ Moat can now select and annotate any element on the page:
 
 ## 📤 Export Format
 
-Annotations are exported in MCP-compatible JSON:
+Annotations are exported as Drawbridge task JSON:
 
 ```json
 {
@@ -311,4 +311,4 @@ window.moatDebug?.checkSystemStatus()
 window.moatDebug?.verifyFiles()
 ```
 
---- 
+---

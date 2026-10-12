@@ -6,6 +6,10 @@
  */
 
 // State
+let contentPort = null;
+let activeTabId = null;
+let panelWindowId = null;
+let tabEpoch = 0;
 let currentTab = 'to do';
 let tasks = [];
 let isConnected = false;
@@ -36,55 +40,39 @@ document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   setupEventListeners();
-  await loadTheme();
-
-  // Small initial delay to let content script load
-  await new Promise(r => setTimeout(r, 100));
-
-  // Try to connect to content script with retry (5 attempts)
-  const ready = await connectWithRetry(5);
-
-  if (ready) {
-    await checkConnectionStatus();
-    if (isConnected) {
-      requestTasks();
-    }
-  }
-
-  // Listen for tab activation changes
   chrome.tabs.onActivated.addListener(handleTabChange);
-
-  // Listen for tab URL changes (navigation)
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'complete') {
-      handleTabChange();
-    }
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (tabId === activeTabId && changeInfo.status === 'loading') handleTabChange();
+    if (tabId === activeTabId && changeInfo.status === 'complete') handleTabChange();
   });
+  await loadTheme();
+  await handleTabChange();
 }
 
-// Handle tab switching - re-check connection status
-async function handleTabChange() {
-  // Small delay to let content script initialize
-  setTimeout(async () => {
-    const ready = await connectWithRetry(2);
-    if (ready) {
-      await checkConnectionStatus();
-      if (isConnected) {
-        requestTasks();
-      } else {
-        tasks = [];
-        renderTasks();
-        updateBadges();
-      }
-    } else {
-      // Content script not ready
-      isConnected = false;
-      tasks = [];
-      updateConnectionBanner();
-      renderTasks();
-      updateBadges();
-    }
-  }, 150);
+// Invalidate outstanding reads before loading another tab's state.
+async function handleTabChange(info) {
+  if (info?.windowId != null && panelWindowId != null && info.windowId !== panelWindowId) return;
+  const epoch = ++tabEpoch;
+  if (contentPort) { contentPort.disconnect(); contentPort = null; }
+  activeTabId = null;
+  contentScriptReady = false;
+  isConnected = false;
+  projectPath = '';
+  currentMode = null;
+  tasks = [];
+  thumbnailCache.clear();
+  updateConnectionBanner();
+  updateToolsButtonState();
+  renderTasks();
+  updateBadges();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (epoch !== tabEpoch || !tab?.id) return;
+  activeTabId = tab.id;
+  panelWindowId = tab.windowId;
+  const ready = await connectWithRetry(5);
+  if (epoch !== tabEpoch || !ready) return;
+  contentPort = chrome.tabs.connect(tab.id, { name: 'drawbridge-sidepanel' });
+  await checkConnectionStatus();
 }
 
 // Event Listeners
@@ -226,6 +214,7 @@ function setupEventListeners() {
 
 // Message Handling
 function handleMessage(message, sender, sendResponse) {
+  if (message.sourceTabId !== activeTabId || message.sourceWindowId !== panelWindowId) return false;
   console.log('[SidePanel] Received message:', message.type);
 
   switch (message.type) {
@@ -292,9 +281,10 @@ let lastErrorTime = 0;
 let contentScriptReady = false;
 
 async function sendToContentScript(message, showError = true) {
+  const epoch = tabEpoch;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) {
+    if (epoch !== tabEpoch || !tab?.id || tab.id !== activeTabId) {
       console.warn('[SidePanel] No active tab');
       return null;
     }
@@ -307,6 +297,7 @@ async function sendToContentScript(message, showError = true) {
 
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(tab.id, message, (response) => {
+        if (epoch !== tabEpoch || tab.id !== activeTabId) { resolve(null); return; }
         if (chrome.runtime.lastError) {
           console.warn('[SidePanel] Send failed:', chrome.runtime.lastError.message);
           contentScriptReady = false;
@@ -333,9 +324,10 @@ async function sendToContentScript(message, showError = true) {
 
 // Ping content script to check if it's ready
 async function pingContentScript() {
+  const epoch = tabEpoch;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return false;
+    if (epoch !== tabEpoch || !tab?.id || tab.id !== activeTabId) return false;
 
     const restrictedSchemes = ['chrome://', 'chrome-extension://', 'edge://', 'about:', 'devtools://'];
     if (tab.url && restrictedSchemes.some(scheme => tab.url.startsWith(scheme))) {
@@ -344,6 +336,7 @@ async function pingContentScript() {
 
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(tab.id, { action: 'ping' }, (response) => {
+        if (epoch !== tabEpoch || tab.id !== activeTabId) { resolve(false); return; }
         if (chrome.runtime.lastError) {
           resolve(false);
         } else {
@@ -358,8 +351,10 @@ async function pingContentScript() {
 
 // Retry connection with backoff
 async function connectWithRetry(maxRetries = 3) {
+  const epoch = tabEpoch;
   for (let i = 0; i < maxRetries; i++) {
     const ready = await pingContentScript();
+    if (epoch !== tabEpoch) return false;
     if (ready) {
       contentScriptReady = true;
       updatePageStatus();
@@ -380,8 +375,10 @@ function updatePageStatus() {
 }
 
 async function checkConnectionStatus() {
+  const epoch = tabEpoch;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (epoch !== tabEpoch) return;
     if (!tab?.id) {
       // No active tab
       isConnected = false;
@@ -401,6 +398,7 @@ async function checkConnectionStatus() {
 
     // Don't show error for status check - content script might just need page refresh
     const response = await sendToContentScript({ type: 'GET_CONNECTION_STATUS' }, false);
+    if (epoch !== tabEpoch) return;
     if (response) {
       isConnected = response.connected;
       projectPath = response.path || '';
@@ -550,6 +548,7 @@ function addTaskEventListeners() {
 
 // Load thumbnails for tasks with screenshots
 async function loadThumbnails() {
+  const epoch = tabEpoch;
   const thumbnailContainers = taskContainer.querySelectorAll('.thumbnail-container');
 
   for (const container of thumbnailContainers) {
@@ -567,12 +566,14 @@ async function loadThumbnails() {
     // Request thumbnail from content script
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (epoch !== tabEpoch || tab?.id !== activeTabId) return;
       if (tab?.id) {
         chrome.tabs.sendMessage(tab.id, {
           type: 'GET_THUMBNAIL',
           screenshotPath,
           taskId
         }, (response) => {
+          if (epoch !== tabEpoch) return;
           if (response?.success && response.dataUrl) {
             thumbnailCache.set(screenshotPath, response.dataUrl);
             setThumbnailSrc(container, response.dataUrl);

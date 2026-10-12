@@ -28,6 +28,8 @@
         "html2canvas.min.js",
         "utils/safeStorage.js",
         "utils/persistence.js",
+        "utils/buildInfo.js",
+        "utils/elementPicker.js",
         "utils/taskStore.js",
         "utils/markdownGenerator.js",
         "utils/migrateLegacyFiles.js",

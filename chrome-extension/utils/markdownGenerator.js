@@ -146,6 +146,15 @@ function rebuildMarkdownFromJson(tasks) {
 
 /**
  * Write markdown content to file using File System Access API
+ *
+ * Uses `mode: "exclusive"` to write in-place rather than via the default
+ * siloed swap-file pattern. When the target is locked by another editor
+ * (Cursor, VS Code, etc.) the siloed mode persists the swap as a numbered
+ * duplicate (`moat-tasks 2.md`, `moat-tasks 3.md`...). Falls back to the
+ * default mode on browsers that don't yet accept the option.
+ *
+ * Also skips redundant writes when the on-disk content matches.
+ *
  * @param {string} markdownContent - Generated markdown content
  * @returns {Promise<boolean>} Promise resolving to write success status
  */
@@ -154,10 +163,27 @@ async function writeMarkdownToFile(markdownContent) {
         if (typeof window !== 'undefined' && window.directoryHandle) {
             const fileHandle = await window.directoryHandle.getFileHandle('moat-tasks.md', { create: true });
 
-            // Use keepExistingData: false to truncate and overwrite
-            const writable = await fileHandle.createWritable({ keepExistingData: false });
+            // Skip if file already contains identical content
+            try {
+                const existing = await fileHandle.getFile();
+                if (existing.size === new Blob([markdownContent]).size) {
+                    const existingText = await existing.text();
+                    if (existingText === markdownContent) {
+                        return true;
+                    }
+                }
+            } catch (_) {
+                // Existence/read check is advisory only — fall through to write
+            }
 
-            // Write new content (file is truncated first)
+            let writable;
+            try {
+                writable = await fileHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+            } catch (err) {
+                // Older Chrome versions may reject `mode`; retry without it.
+                writable = await fileHandle.createWritable({ keepExistingData: false });
+            }
+
             await writable.write(markdownContent);
             await writable.close();
 

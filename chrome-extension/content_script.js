@@ -1,9 +1,77 @@
 // Moat Chrome Extension - Content Script
 (function() {
+  const contentScriptBuild = DrawbridgeBuildInfo.getContentScriptBuild(
+    chrome.runtime.getManifest().version
+  );
+
+  if (window.__drawbridgeContentScriptBuild === contentScriptBuild) {
+    return;
+  }
+
+  if (window.__drawbridgeContentScriptLoaded) {
+    // An older build is already live in this page. Its event handlers cannot be
+    // swapped out in place, so reload once to load the fresh code instead of
+    // silently running stale handlers. The per-build sessionStorage flag makes
+    // this a single reload and guards against any reload loop.
+    const RELOAD_FLAG = '__drawbridgeReloadedForBuild';
+    try {
+      if (sessionStorage.getItem(RELOAD_FLAG) !== contentScriptBuild) {
+        sessionStorage.setItem(RELOAD_FLAG, contentScriptBuild);
+        console.warn(
+          '[Drawbridge] New build (%s) detected; reloading page to apply it.',
+          contentScriptBuild
+        );
+        location.reload();
+        return;
+      }
+    } catch (e) {
+      // sessionStorage may be unavailable (sandboxed frames); fall through.
+    }
+
+    window.__drawbridgeNeedsRefresh = true;
+    console.warn(
+      '[Drawbridge] Extension updated (%s). Refresh this page (Ctrl+Shift+R) to enable deep select.',
+      contentScriptBuild
+    );
+    return;
+  }
+
+  window.__drawbridgeContentScriptLoaded = true;
+  window.__drawbridgeContentScriptBuild = contentScriptBuild;
+
+  // Host-app modals with a focus trap (e.g. Radix Dialog / focus-lock) reclaim focus
+  // whenever it leaves their subtree. Drawbridge's inputs live at <body> level (light DOM),
+  // so the trap steals focus the instant you click the comment box -> you can't type.
+  // Fix: capture-phase guard that stops focus events on Drawbridge nodes from reaching the
+  // app's document-level handlers. Capture runs before the app's bubble-phase focusin handler,
+  // and we only stop events originating inside Drawbridge UI, so the app's own focus is untouched.
+  const __moatNodeSelector = '[id^="moat-"],[class*="moat"],[class*="float-comment"]';
+  for (const __type of ['focusin', 'focusout']) {
+    document.addEventListener(__type, (e) => {
+      const isDrawbridgeNode = (node) =>
+        node instanceof Element && !!node.closest(__moatNodeSelector);
+      // focusout originates on the host input when focus enters our editor.
+      // Traps inspect relatedTarget and can reclaim focus before focusin fires.
+      if (isDrawbridgeNode(e.target) ||
+          (__type === 'focusout' && isDrawbridgeNode(e.relatedTarget))) {
+        e.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  let sidePanelConnections = 0;
   let commentMode = false;
   let hoveredElement = null;
   let commentBox = null;
   let highlightedElement = null;
+  let deepSelectIndex = 0;
+  let pickStack = [];
+  let lastPointer = { x: 0, y: 0 };
+  let drilledOnPointerdown = false;
+  let deepSelectBadge = null;
+  // Track Control via keydown — macOS Ctrl+Click becomes right-click and drops ctrlKey.
+  let controlKeyHeld = false;
+  let lastTopPickElement = null;
   let projectRoot = null;
   let markdownFileHandle = null; // Handle for moat-tasks.md
 
@@ -85,6 +153,28 @@
 
   // Initialize utility modules
   let migrator = null; // Task 4.6: Migration system
+
+  // Remove duplicate task files left behind by Chrome's siloed swap-file mode
+  // when an editor was holding the target open during a previous write.
+  // Matches "moat-tasks 2.md", "moat-tasks-detail 3.json", etc.
+  async function cleanupDuplicateTaskFiles() {
+    if (!window.directoryHandle || typeof window.directoryHandle.entries !== 'function') return;
+    const pattern = /^moat-tasks(?:-detail)? \d+\.(?:md|json)$/;
+    const toRemove = [];
+    for await (const [name, handle] of window.directoryHandle.entries()) {
+      if (handle.kind === 'file' && pattern.test(name)) {
+        toRemove.push(name);
+      }
+    }
+    for (const name of toRemove) {
+      try {
+        await window.directoryHandle.removeEntry(name);
+        console.log(`🧹 Moat: removed duplicate ${name}`);
+      } catch (err) {
+        console.warn(`🧹 Moat: could not remove ${name}:`, err);
+      }
+    }
+  }
 
   function initializeUtilities() {
     console.log('🔧 Moat: Initializing TaskStore and MarkdownGenerator utilities...');
@@ -326,6 +416,11 @@
       screenshotPath: screenshotPath || ''
     };
 
+    // Pasted clipboard reference images (paths under ./screenshots), if any
+    if (annotation.attachments?.length) {
+      taskData.attachments = annotation.attachments;
+    }
+
     // Add bounding box data for freeform rectangles (preserve all formats)
     if (annotation.boundingBox && annotation.boundingBox.type === 'freeform') {
       taskData.boundingBox = annotation.boundingBox;
@@ -384,6 +479,106 @@
       console.error('Moat: Failed to save screenshot:', error);
       return '';
     }
+  }
+
+  // Save clipboard-pasted reference images to ./screenshots and return their paths.
+  async function savePastedImagesToFiles(annotation) {
+    if (!annotation.pastedImages?.length) return [];
+    if (!window.directoryHandle) {
+      throw new Error('Connect a project before saving pasted images.');
+    }
+    const screenshotsDir = await window.directoryHandle.getDirectoryHandle('screenshots', { create: true });
+    const paths = [];
+    for (let i = 0; i < annotation.pastedImages.length; i++) {
+      const match = /^data:(image\/[\w.+-]+);base64,(.*)$/s.exec(annotation.pastedImages[i]);
+      if (!match) throw new Error('A pasted image could not be read. Remove it and paste it again.');
+      const [, mime, base64] = match;
+      const ext = mime.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const fileName = `${annotation.id}-paste-${i + 1}.${ext}`;
+      try {
+        const fileHandle = await screenshotsDir.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable({ keepExistingData: false });
+        await writable.write(new Blob([bytes], { type: mime }));
+        await writable.close();
+        paths.push(`./screenshots/${fileName}`);
+      } catch (error) {
+        console.error('Moat: Failed to save pasted image:', error);
+        throw error;
+      }
+    }
+    return paths;
+  }
+
+  // Keep the editor and its images available when any part of the save fails.
+  async function submitCommentAnnotation(box, annotation) {
+    if (box.isSubmitting) return false;
+    box.isSubmitting = true;
+    const submit = box.querySelector('.float-comment-submit');
+    submit.disabled = true;
+    try {
+      await addToQueue(annotation);
+      return true;
+    } catch (error) {
+      console.error('Moat: Annotation save failed:', error);
+      showNotification(`Could not save annotation: ${error.message} Your comment and images are still here; retry when ready.`, 'error');
+      return false;
+    } finally {
+      box.isSubmitting = false;
+      submit.disabled = false;
+    }
+  }
+
+  // Wire clipboard-image paste onto a comment box's textarea: store image data
+  // URLs on box.pastedImages and render removable thumbnails. Text paste is
+  // left untouched (we only intercept when the clipboard carries an image).
+  function enablePasteImages(box, textarea) {
+    box.pastedImages = [];
+    const strip = box.querySelector('.float-comment-attachments');
+
+    const render = () => {
+      if (!strip) return;
+      strip.replaceChildren();
+      box.pastedImages.forEach((dataUrl, index) => {
+        const thumb = document.createElement('div');
+        thumb.className = 'float-comment-thumb';
+
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        thumb.appendChild(img);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'float-comment-thumb-remove';
+        remove.textContent = '×';
+        remove.title = 'Remove';
+        remove.addEventListener('click', () => {
+          box.pastedImages.splice(index, 1);
+          render();
+        });
+        thumb.appendChild(remove);
+
+        strip.appendChild(thumb);
+      });
+    };
+
+    textarea.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageItems = [...items].filter(item => item.type.startsWith('image/'));
+      if (!imageItems.length) return; // no image on clipboard → normal text paste
+      e.preventDefault();
+      for (const item of imageItems) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          box.pastedImages.push(reader.result);
+          render();
+        };
+        reader.readAsDataURL(file);
+      }
+    });
   }
 
   /**
@@ -687,7 +882,12 @@
         
         // Create markdown file handle
         markdownFileHandle = await window.directoryHandle.getFileHandle('moat-tasks.md', { create: true });
-        
+
+        // Sweep any leftover siloed-swap duplicates ("moat-tasks 2.md", etc.)
+        cleanupDuplicateTaskFiles().catch(err =>
+          console.warn('🧹 Moat: duplicate sweep failed:', err)
+        );
+
         // Dispatch single success event using coordinated system
         if (!connectionEventDispatched) {
           connectionEventDispatched = true;
@@ -1070,7 +1270,12 @@
           
           if (!content.trim()) {
             console.log('Moat: Initializing empty markdown file...');
-            const markdownWritable = await markdownFileHandle.createWritable({ keepExistingData: false });
+            let markdownWritable;
+            try {
+              markdownWritable = await markdownFileHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+            } catch (_) {
+              markdownWritable = await markdownFileHandle.createWritable({ keepExistingData: false });
+            }
             await markdownWritable.write(`# Moat Tasks
 
 Generated by Moat Chrome Extension
@@ -1133,6 +1338,18 @@ Generated by Moat Chrome Extension
         // Add .claude/ if not present (for Claude Code slash commands)
         if (!gitignoreContent.includes('.claude/')) {
           gitignoreContent += '\n# Claude Code configuration\n.claude/\n';
+          updated = true;
+        }
+
+        // Add .windsurf/ if not present (for Windsurf workflows)
+        if (!gitignoreContent.includes('.windsurf/')) {
+          gitignoreContent += '\n# Windsurf configuration\n.windsurf/\n';
+          updated = true;
+        }
+
+        // Add .codex/ if not present (for Codex CLI prompts)
+        if (!gitignoreContent.includes('.codex/')) {
+          gitignoreContent += '\n# Codex CLI configuration\n.codex/\n';
           updated = true;
         }
 
@@ -1267,25 +1484,41 @@ Generated by Moat Chrome Extension
         }
       }
       
+      // Helper: deploy a template into <projectRootDir>/<...path>/filename
+      async function deployToProjectPath(pathSegments, filename, content, label) {
+        if (!projectRootDir) return;
+        let dir = projectRootDir;
+        for (const segment of pathSegments) {
+          dir = await dir.getDirectoryHandle(segment, { create: true });
+        }
+        const fileHandle = await dir.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable({ keepExistingData: false });
+        await writable.write(content);
+        await writable.close();
+        console.log(`✅ Moat: Deployed ${filename} to ${label}`);
+      }
+
       // Deploy each template file
       for (const [filename, content] of Object.entries(templates)) {
         try {
-          // Handle Claude Code command deployment to .claude/commands/
           if (filename === 'bridge.md' && projectRootDir) {
-            console.log('🔧 Moat: Deploying Claude Code command to .claude/commands/');
+            // Claude Code: .claude/commands/bridge.md
+            console.log('🔧 Moat: Deploying bridge command to .claude/commands/');
+            await deployToProjectPath(['.claude', 'commands'], filename, content, '.claude/commands/');
 
-            // Create .claude directory in project root
-            const claudeDir = await projectRootDir.getDirectoryHandle('.claude', { create: true });
+            // Windsurf: .windsurf/workflows/bridge.md (slash-command workflow)
+            try {
+              await deployToProjectPath(['.windsurf', 'workflows'], filename, content, '.windsurf/workflows/');
+            } catch (err) {
+              console.warn('🔧 Moat: Windsurf workflow deploy skipped:', err.message);
+            }
 
-            // Create commands subdirectory
-            const commandsDir = await claudeDir.getDirectoryHandle('commands', { create: true });
-
-            // Deploy bridge.md to .claude/commands/
-            const fileHandle = await commandsDir.getFileHandle(filename, { create: true });
-            const writable = await fileHandle.createWritable({ keepExistingData: false });
-            await writable.write(content);
-            await writable.close();
-            console.log(`✅ Moat: Deployed ${filename} to .claude/commands/`);
+            // Codex CLI: .codex/prompts/bridge.md (saved prompt)
+            try {
+              await deployToProjectPath(['.codex', 'prompts'], filename, content, '.codex/prompts/');
+            } catch (err) {
+              console.warn('🔧 Moat: Codex prompt deploy skipped:', err.message);
+            }
           } else if (filename !== 'bridge.md') {
             // Deploy other templates to .moat directory
             const fileHandle = await moatDir.getFileHandle(filename, { create: true });
@@ -1350,6 +1583,7 @@ The \`.json\` file is the primary source of truth for all task information. You 
 -   \`selector\`: The precise CSS selector for the target element.
 -   \`title\`, \`boundingRect\`: Context for locating the element.
 -   \`screenshotPath\`: Path to the screenshot showing the user's annotation context.
+-   \`attachments\`: Optional paths to reference images the user pasted from the clipboard (e.g. a target design/mockup). Open each one before implementing, just like the screenshot.
 
 ### Task Dependency Detection
 
@@ -1423,6 +1657,8 @@ Result: Task 1 must complete before Tasks 2 & 3
     -   Visual context and surrounding elements  
     -   Current state vs desired state
     -   Layout and positioning context
+
+    **Pasted reference images**: If the task JSON has an \`attachments\` array, read each listed image as well. These are references the user pasted from their clipboard (a target design, an example to match) and must inform the implementation alongside the screenshot.
 
 3.  **Validation Steps**:
     \`\`\`
@@ -1919,6 +2155,8 @@ Files to read:
 - **Human-readable**: \`moat-tasks.md\` - Task checklist
 - **Screenshots**: \`.moat/screenshots/\` - Visual context
 
+**Pasted references**: A task's \`attachments\` array (if present) lists images the user pasted from their clipboard (\`./screenshots/...-paste-N.png\`). Open each one before implementing — they are reference images (a target design/example) and must guide the change alongside the screenshot.
+
 **Important**: Always check \`.moat/\` subdirectory first before checking project root.
 
 ## ⚠️ CRITICAL: Status Lifecycle (MUST FOLLOW)
@@ -2191,8 +2429,13 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
           const newEmoji = getStatusEmoji(annotation.status);
           content = content.replace(taskHeaderPattern, `## ${newEmoji} ${annotation.elementLabel}`);
           
-          // Write back the updated content
-          const writable = await markdownFileHandle.createWritable({ keepExistingData: false });
+          // Write back the updated content (exclusive mode avoids duplicate files)
+          let writable;
+          try {
+            writable = await markdownFileHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+          } catch (_) {
+            writable = await markdownFileHandle.createWritable({ keepExistingData: false });
+          }
           await writable.write(content);
           await writable.close();
         }
@@ -2252,10 +2495,15 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       existingTasks.push(newTask);
       console.log('🔧 Moat: Total tasks now:', existingTasks.length);
       
-      // Step 5: Write JSON file
+      // Step 5: Write JSON file (exclusive mode avoids siloed swap-file duplicates)
       console.log('🔧 Moat: Writing JSON file...');
       const jsonHandle = await window.directoryHandle.getFileHandle('moat-tasks-detail.json', { create: true });
-      const jsonWritable = await jsonHandle.createWritable({ keepExistingData: false });
+      let jsonWritable;
+      try {
+        jsonWritable = await jsonHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+      } catch (_) {
+        jsonWritable = await jsonHandle.createWritable({ keepExistingData: false });
+      }
       await jsonWritable.write(JSON.stringify(existingTasks, null, 2));
       await jsonWritable.close();
       console.log('✅ Moat: JSON file written successfully');
@@ -2299,10 +2547,15 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       markdown += `_Generated: ${new Date().toLocaleString()}_\n`;
       markdown += `_Source: moat-tasks-detail.json_\n`;
       
-      // Step 6: Write markdown file
+      // Step 6: Write markdown file (exclusive mode avoids siloed swap-file duplicates)
       console.log('🔧 Moat: Writing markdown file...');
       const mdHandle = await window.directoryHandle.getFileHandle('moat-tasks.md', { create: true });
-      const mdWritable = await mdHandle.createWritable({ keepExistingData: false });
+      let mdWritable;
+      try {
+        mdWritable = await mdHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+      } catch (_) {
+        mdWritable = await mdHandle.createWritable({ keepExistingData: false });
+      }
       await mdWritable.write(markdown);
       await mdWritable.close();
       console.log('✅ Moat: Markdown file written successfully');
@@ -2451,11 +2704,16 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         return task;
       });
       
-      // Save updated tasks
-      const jsonWritable = await jsonHandle.createWritable({ keepExistingData: false });
+      // Save updated tasks (exclusive mode avoids siloed swap-file duplicates)
+      let jsonWritable;
+      try {
+        jsonWritable = await jsonHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+      } catch (_) {
+        jsonWritable = await jsonHandle.createWritable({ keepExistingData: false });
+      }
       await jsonWritable.write(JSON.stringify(updatedTasks, null, 2));
       await jsonWritable.close();
-      
+
       // Regenerate markdown
       if (markdownGenerator) {
         await markdownGenerator.rebuildMarkdownFile(updatedTasks);
@@ -2495,8 +2753,13 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       task.processedBy = 'agent';
       task.codeChanges = codeChanges;
       
-      // Save updated JSON
-      const jsonWritable = await jsonHandle.createWritable({ keepExistingData: false });
+      // Save updated JSON (exclusive mode avoids siloed swap-file duplicates)
+      let jsonWritable;
+      try {
+        jsonWritable = await jsonHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+      } catch (_) {
+        jsonWritable = await jsonHandle.createWritable({ keepExistingData: false });
+      }
       await jsonWritable.write(JSON.stringify(tasks, null, 2));
       await jsonWritable.close();
       
@@ -2861,6 +3124,16 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     console.log('📝 Moat: ===== STARTING ANNOTATION PROCESSING =====');
     console.log('📝 Moat: Processing annotation:', annotation.elementLabel);
     console.log('📝 Moat: Annotation ID:', annotation.id);
+
+    // Persist any clipboard-pasted reference images and reference them in the
+    // task comment, the field /bridge always reads, so the LLM picks them up.
+    if (annotation.pastedImages?.length) {
+      const refs = await savePastedImagesToFiles(annotation);
+      if (refs.length) {
+        annotation.attachments = refs;
+        annotation.content = `${annotation.content}\n\nPasted reference image(s):\n${refs.map(p => `- ${p}`).join('\n')}`.trim();
+      }
+    }
     
     // Choose save system based on availability (Task 2.8: End-to-end flow)
     const canUseNew = canUseNewTaskSystem();
@@ -3165,11 +3438,12 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     commentBox.highlightedElement = element; // Store element reference
     commentBox.highlightOverlay = hoverOverlay; // Store overlay reference for cleanup
     commentBox.innerHTML = `
-      <textarea 
-        class="float-comment-input" 
-        placeholder="What needs to be fixed?"
+      <textarea
+        class="float-comment-input"
+        placeholder="What needs to be fixed? (paste an image to attach a reference)"
         autofocus
       ></textarea>
+      <div class="float-comment-attachments"></div>
       <div class="float-comment-actions">
         <button class="float-comment-cancel">Cancel</button>
         <button class="float-comment-submit">Submit (Enter)</button>
@@ -3229,10 +3503,16 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Focus textarea
     setTimeout(() => textarea.focus(), 50);
+
+    // Allow pasting reference images from the clipboard
+    enablePasteImages(commentBox, textarea);
     
     // Handle submit
     const handleSubmit = async () => {
-      const content = textarea.value.trim();
+      const box = commentBox;
+      if (!box || box.isSubmitting) return;
+      const content = textarea.value.trim()
+        || (commentBox.pastedImages?.length ? 'See pasted reference image(s).' : '');
       if (!content) return;
       
       const rect = element.getBoundingClientRect();
@@ -3272,7 +3552,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         timestamp: Date.now(),
         sessionId: sessionId,
         status: "to do",
-        id: `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        id: box.annotationId || (box.annotationId = `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
       };
       
       // Use pre-captured screenshot (captured when comment box was created)
@@ -3284,13 +3564,11 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         console.log('⚠️ Moat: No pre-captured screenshot available');
       }
       
-      // Remove DOM overlay after submission
-      if (commentBox.highlightOverlay) {
-        commentBox.highlightOverlay.remove();
-        hoverOverlay = null;
-      }
-      
-      addToQueue(annotation);
+      annotation.pastedImages = [...box.pastedImages];
+      if (!await submitCommentAnnotation(box, annotation)) return;
+      if (commentBox !== box) return;
+
+      // Dismiss only after the annotation has been saved or queued.
       exitCommentMode();
     };
     
@@ -3299,10 +3577,12 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     cancelBtn.addEventListener('click', exitCommentMode);
     
     textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Skip Enter while IME is composing (Japanese, Chinese, Korean, etc.)
+      // keyCode === 229 covers older browsers where isComposing is unreliable on commit
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         handleSubmit();
-      } else if (e.key === 'Escape') {
+      } else if (e.key === 'Escape' && !e.isComposing && e.keyCode !== 229) {
         exitCommentMode();
       }
     });
@@ -3332,6 +3612,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
 
   // Enter comment mode
   function enterCommentMode() {
+    if (window.__drawbridgeNeedsRefresh) {
+      showNotification('Refresh page (Ctrl+Shift+R) for latest Drawbridge', 'error');
+      return;
+    }
     commentMode = true;
     document.body.classList.add('float-comment-mode');
   }
@@ -3340,6 +3624,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   function exitCommentMode() {
     commentMode = false;
     document.body.classList.remove('float-comment-mode');
+    deepSelectIndex = 0;
+    pickStack = [];
+    lastTopPickElement = null;
+    removeDeepSelectBadge();
     
     // Remove DOM overlay from the element
     if (commentBox && commentBox.highlightOverlay) {
@@ -3511,11 +3799,12 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     commentBox.screenshotData = screenshotData;
     commentBox.rectangleData = rectangleData; // Store rectangle data
     commentBox.innerHTML = `
-      <textarea 
-        class="float-comment-input" 
-        placeholder="What needs to be fixed?"
+      <textarea
+        class="float-comment-input"
+        placeholder="What needs to be fixed? (paste an image to attach a reference)"
         autofocus
       ></textarea>
+      <div class="float-comment-attachments"></div>
       <div class="float-comment-actions">
         <button class="float-comment-cancel">Cancel</button>
         <button class="float-comment-submit">Submit (Enter)</button>
@@ -3568,10 +3857,16 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     
     // Focus textarea
     setTimeout(() => textarea.focus(), 50);
+
+    // Allow pasting reference images from the clipboard
+    enablePasteImages(commentBox, textarea);
     
     // Handle submit
     const handleSubmit = async () => {
-      const content = textarea.value.trim();
+      const box = commentBox;
+      if (!box || box.isSubmitting) return;
+      const content = textarea.value.trim()
+        || (commentBox.pastedImages?.length ? 'See pasted reference image(s).' : '');
       if (!content) return;
       
       // Get rectangle data from comment box
@@ -3607,7 +3902,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         timestamp: Date.now(),
         sessionId: sessionId,
         status: "to do",
-        id: `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        id: box.annotationId || (box.annotationId = `moat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
       };
       
       // Use pre-captured screenshot
@@ -3617,6 +3912,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         console.log('✅ Moat: Using pre-captured screenshot with rectangle');
       }
       
+      annotation.pastedImages = [...box.pastedImages];
+      if (!await submitCommentAnnotation(box, annotation)) return;
+      if (commentBox !== box) return;
+
       // Clear canvas after submission
       if (drawingCtx && drawingCanvas) {
         drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
@@ -3626,7 +3925,6 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       exitDrawingMode();
       removeDrawingCanvas();
       
-      addToQueue(annotation);
       removeCommentBox();
     };
     
@@ -3643,10 +3941,11 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     });
     
     textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Skip Enter/Escape while IME is composing (Japanese, Chinese, Korean, etc.)
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         handleSubmit();
-      } else if (e.key === 'Escape') {
+      } else if (e.key === 'Escape' && !e.isComposing && e.keyCode !== 229) {
         // Clear canvas and exit drawing mode
         if (drawingCtx && drawingCanvas) {
           drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
@@ -3661,24 +3960,178 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   // Global hover overlay element
   let hoverOverlay = null;
 
+  function getElementPicker() {
+    return window.MoatElementPicker;
+  }
+
+  function setControlKeyHeld(held) {
+    controlKeyHeld = !!held;
+  }
+
+  function isDeepSelectModifier(event) {
+    const pickerApi = getElementPicker();
+    if (pickerApi && typeof pickerApi.isDeepSelectControlActive === 'function') {
+      return pickerApi.isDeepSelectControlActive(event, controlKeyHeld);
+    }
+    // Fallback if picker script failed to inject
+    return !!(
+      controlKeyHeld ||
+      (event &&
+        (event.ctrlKey ||
+          (event.getModifierState && event.getModifierState('Control'))))
+    );
+  }
+
+  // Capture Control held-state before OS remaps Ctrl+Click on macOS/Linux.
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      const pickerApi = getElementPicker();
+      if (pickerApi && typeof pickerApi.isControlKeyEvent === 'function') {
+        if (pickerApi.isControlKeyEvent(e)) {
+          setControlKeyHeld(true);
+        }
+        return;
+      }
+      if (e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        setControlKeyHeld(true);
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    'keyup',
+    (e) => {
+      const pickerApi = getElementPicker();
+      if (pickerApi && typeof pickerApi.isControlKeyEvent === 'function') {
+        if (pickerApi.isControlKeyEvent(e)) {
+          setControlKeyHeld(false);
+        }
+        return;
+      }
+      if (e.key === 'Control' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        setControlKeyHeld(false);
+      }
+    },
+    true
+  );
+
+  window.addEventListener('blur', () => setControlKeyHeld(false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') {
+      setControlKeyHeld(false);
+    }
+  });
+
+  function removeDeepSelectBadge() {
+    if (deepSelectBadge) {
+      deepSelectBadge.remove();
+      deepSelectBadge = null;
+    }
+    document.body.classList.remove('float-deep-select-active');
+  }
+
+  function updateDeepSelectBadge(depth, total, x, y, show) {
+    removeDeepSelectBadge();
+    if (!show || total <= 1) {
+      return;
+    }
+
+    deepSelectBadge = document.createElement('div');
+    deepSelectBadge.className = 'float-deep-select-badge';
+    deepSelectBadge.textContent = `Layer ${depth}/${total}`;
+    deepSelectBadge.style.left = `${Math.min(x + 12, window.innerWidth - 120)}px`;
+    deepSelectBadge.style.top = `${Math.min(y + 12, window.innerHeight - 32)}px`;
+    document.body.appendChild(deepSelectBadge);
+    document.body.classList.add('float-deep-select-active');
+  }
+
+  function refreshPickAtPointer(clientX, clientY) {
+    const pickerApi = getElementPicker();
+    if (!pickerApi) {
+      return null;
+    }
+
+    lastPointer = { x: clientX, y: clientY };
+
+    const pick = pickerApi.pickElementAtPoint(clientX, clientY, deepSelectIndex);
+    pickStack = pick.stack;
+
+    if (!pick.element) {
+      hoveredElement = null;
+      removeHighlight();
+      removeDeepSelectBadge();
+      return null;
+    }
+
+    hoveredElement = pick.element;
+    const isDeep = deepSelectIndex > 0 && pick.total > 1;
+    highlightElement(pick.element, isDeep);
+    updateDeepSelectBadge(pick.depth, pick.total, clientX, clientY, isDeep);
+    return pick.element;
+  }
+
+  function drillDeeperAtPointer() {
+    const pickerApi = getElementPicker();
+    if (!pickerApi) {
+      console.warn('[Drawbridge] Deep select unavailable — MoatElementPicker missing. Refresh the page.');
+      showNotification('Refresh page for deep select', 'error');
+      return null;
+    }
+
+    // A tap or a click immediately after entering the mode may have no hover.
+    // Recompute the stack at the actual gesture coordinates before cycling.
+    refreshPickAtPointer(lastPointer.x, lastPointer.y);
+    if (pickStack.length <= 1) {
+      showNotification('Only one layer under cursor', 'info');
+      console.info('[Drawbridge] Deep select: single layer at pointer');
+      return null;
+    }
+
+    deepSelectIndex = pickerApi.cycleDepthIndex(deepSelectIndex, pickStack.length, 1);
+    const element = refreshPickAtPointer(lastPointer.x, lastPointer.y);
+    const pick = pickerApi.pickElementAtPoint(lastPointer.x, lastPointer.y, deepSelectIndex);
+
+    console.info(
+      '[Drawbridge] Deep select drill → layer',
+      pick.depth + '/' + pick.total,
+      pick.element?.tagName?.toLowerCase(),
+      pick.element?.className || pick.element?.id || ''
+    );
+    showNotification(`Layer ${pick.depth}/${pick.total} — click to comment`, 'info');
+
+    return element;
+  }
+
+  // Trackpads often skip pointerdown with ctrlKey; click may be the only signal.
+  // pointerdown+click from a mouse should drill only once per gesture.
+  function handleDeepSelectDrill() {
+    return drillDeeperAtPointer();
+  }
+
   // Highlight element on hover with DOM overlay
-  function highlightElement(element) {
+  function highlightElement(element, isDeepSelect = false) {
     removeHighlight();
     highlightedElement = element;
     
     // Create overlay div for both hover and click
     const rect = element.getBoundingClientRect();
     hoverOverlay = document.createElement('div');
-    hoverOverlay.className = 'float-hover-overlay';
+    hoverOverlay.className = isDeepSelect
+      ? 'float-hover-overlay float-hover-overlay-deep'
+      : 'float-hover-overlay';
+    const borderColor = isDeepSelect ? '#F59E0B' : '#3B82F6';
+    const bgColor = isDeepSelect ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.1)';
     hoverOverlay.style.cssText = `
       position: absolute;
       left: ${rect.x + window.scrollX}px;
       top: ${rect.y + window.scrollY}px;
       width: ${rect.width}px;
       height: ${rect.height}px;
-      border: 3px solid #3B82F6;
+      border: 3px solid ${borderColor};
       border-radius: 4px;
-      background-color: rgba(59, 130, 246, 0.1);
+      background-color: ${bgColor};
       pointer-events: none;
       z-index: 9998;
       box-sizing: border-box;
@@ -3721,14 +4174,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
   // Mouse move handler
   document.addEventListener('mousemove', (e) => {
     if (!commentMode || commentBox) return; // Don't highlight if comment box is open
-    
-    const element = document.elementFromPoint(e.clientX, e.clientY);
-    
-    // Skip if element is the shadow host (moat UI container)
-    if (element && element.id === 'moat-shadow-host') {
-      return;
-    }
-    
+
     // Use composedPath() to properly detect if hovering over Shadow DOM elements
     const path = e.composedPath();
     const hoveringOverMoatUI = path.some(el => 
@@ -3738,10 +4184,18 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       )
     );
     
-    if (element && element !== hoveredElement && !hoveringOverMoatUI) {
-      hoveredElement = element;
-      highlightElement(element);
+    if (hoveringOverMoatUI) return;
+
+    const pickerApi = getElementPicker();
+    if (pickerApi) {
+      const topPick = pickerApi.pickElementAtPoint(e.clientX, e.clientY, 0);
+      if (topPick.element !== lastTopPickElement) {
+        deepSelectIndex = 0;
+        lastTopPickElement = topPick.element;
+      }
     }
+
+    refreshPickAtPointer(e.clientX, e.clientY);
   });
 
   // Drawing mode mouse handlers
@@ -3928,35 +4382,114 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     createFreeformCommentBox(rectangleData, mouseX, mouseY);
   }
 
-  // Click handler
-  document.addEventListener('click', (e) => {
-    if (!commentMode) return;
-    
-    // Use composedPath() to properly detect clicks inside Shadow DOM
-    // This is necessary because e.target gets retargeted to the shadow host
-    // when events bubble out of Shadow DOM, breaking .closest() checks
+  // Helper: does the event target sit inside Moat's own UI?
+  function isEventInMoatUI(e) {
     const path = e.composedPath();
-    const clickedInsideMoatUI = path.some(el => 
+    const insideMoatUI = path.some(el =>
       el.classList && (
-        el.classList.contains('float-moat') || 
+        el.classList.contains('float-moat') ||
         el.classList.contains('float-comment-box')
       )
     );
-    
-    if (clickedInsideMoatUI) {
-      return;
-    }
-    
-    // Also check for shadow host directly (fallback safety check)
+    if (insideMoatUI) return true;
     const element = e.target;
-    if (element.id === 'moat-shadow-host') {
+    if (element && element.id === 'moat-shadow-host') return true;
+    return false;
+  }
+
+  // Click handler — plain click opens comment; Ctrl+Click drills (trackpad fallback)
+  document.addEventListener('click', (e) => {
+    if (!commentMode) return;
+    if (isEventInMoatUI(e)) return;
+
+    if (isDeepSelectModifier(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (drilledOnPointerdown) {
+        drilledOnPointerdown = false;
+        return;
+      }
+      lastPointer = { x: e.clientX, y: e.clientY };
+      handleDeepSelectDrill();
       return;
     }
-    
+
     e.preventDefault();
     e.stopPropagation();
-    
-    createCommentBox(element, e.clientX, e.clientY);
+
+    // Resolve at click time, preserving the layer chosen with Control.
+    // Keyboard activation and touch need not produce a preceding mousemove.
+    const target = refreshPickAtPointer(e.clientX, e.clientY) || e.target;
+    if (!target) return;
+
+    createCommentBox(target, e.clientX, e.clientY);
+  }, true);
+
+  // macOS: Ctrl+Click is remapped to contextmenu / secondary click.
+  // Catch it here using controlKeyHeld (event.ctrlKey is often false).
+  document.addEventListener(
+    'contextmenu',
+    (e) => {
+      if (!commentMode || commentBox) return;
+      if (isEventInMoatUI(e)) return;
+      if (!isDeepSelectModifier(e)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      lastPointer = { x: e.clientX, y: e.clientY };
+
+      if (drilledOnPointerdown) {
+        drilledOnPointerdown = false;
+        return;
+      }
+      handleDeepSelectDrill();
+    },
+    true
+  );
+
+  // Pointerdown: Ctrl+Click drills (Win/Linux + Mac with held-state); else swallow press
+  document.addEventListener('pointerdown', (e) => {
+    if (!commentMode || commentBox) return;
+    if (isEventInMoatUI(e)) return;
+
+    if (isDeepSelectModifier(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      lastPointer = { x: e.clientX, y: e.clientY };
+      handleDeepSelectDrill();
+      drilledOnPointerdown = true;
+      return;
+    }
+
+    // Ignore non-primary buttons when not deep-selecting (e.g. two-finger right-click)
+    if (typeof e.button === 'number' && e.button !== 0) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }, true);
+
+  document.addEventListener('mouseup', (e) => {
+    if (!commentMode) return;
+    if (isEventInMoatUI(e)) return;
+    if (isDeepSelectModifier(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (typeof e.button === 'number' && e.button !== 0) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
   }, true);
 
   // Global variables for new notification system
@@ -3987,7 +4520,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     }
     
     // Check if sidebar is visible (for C key)
-    const sidebarVisible = window.Moat && window.Moat.isSidebarVisible ? window.Moat.isSidebarVisible() : false;
+    const sidebarVisible = sidePanelConnections > 0;
     const canUseShortcuts = !document.hidden && sidebarVisible;
     
     // Check if user has started interacting (can't switch tools once started)
@@ -4039,7 +4572,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
         if (!hasPressedC) {
           hasPressedC = true;
           // Show the click instruction notification
-          showNotification('Click anywhere to comment', 'info', 'click-instruction');
+          showNotification('Click to comment · Ctrl+Click deep select', 'info', 'click-instruction');
         }
         
         enterCommentMode();
@@ -4379,7 +4912,14 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     // Legacy action-based messages
     if (request.action === 'ping') {
       // Simple ping to check if content script is ready
-      sendResponse({ success: true, ready: true });
+      sendResponse({
+        success: true,
+        ready: true,
+        contentScriptBuild: window.__drawbridgeContentScriptBuild || null,
+        hasElementPicker: !!window.MoatElementPicker,
+        needsRefresh: !!window.__drawbridgeNeedsRefresh
+      });
+
     } else if (request.action === 'getQueueStatus') {
       const queue = window.MoatSafeStorage ? window.MoatSafeStorage.getJSON('moat.queue', []) : [];
       sendResponse({
@@ -4401,7 +4941,8 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     }
 
     else if (request.type === 'SETUP_PROJECT') {
-      setupProject().then(() => {
+      setupProject().then((connected) => {
+        if (!connected) { sendResponse({ success: false }); return; }
         // Notify side panel of connection
         relayToSidePanel({
           type: 'PROJECT_CONNECTED',
@@ -4556,6 +5097,9 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       throw new Error('TaskStore not initialized');
     }
     await taskStore.updateTaskStatusAndSave(taskId, status);
+    if (markdownGenerator && window.directoryHandle) {
+      await markdownGenerator.rebuildMarkdownFile(taskStore.getAllTasksChronological());
+    }
     // Dispatch event for moat.js (during migration period)
     window.dispatchEvent(new CustomEvent('moat:tasks-updated'));
   }
@@ -4565,11 +5109,10 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
     if (!taskStore) {
       throw new Error('TaskStore not initialized');
     }
-    await taskStore.deleteTask(taskId);
-    await taskStore.saveTasksToFile();
+    await taskStore.removeTaskAndSave(taskId);
     // Rebuild markdown
     if (markdownGenerator && window.directoryHandle) {
-      await markdownGenerator.rebuildMarkdownFile(window.directoryHandle, taskStore.tasks);
+      await markdownGenerator.rebuildMarkdownFile(taskStore.getAllTasksChronological());
     }
     // Dispatch event for moat.js (during migration period)
     window.dispatchEvent(new CustomEvent('moat:tasks-updated'));
@@ -4719,7 +5262,7 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       if (!hasPressedC) {
         hasPressedC = true;
         // Show the click instruction notification
-        showNotification('Click anywhere to comment', 'info', 'click-instruction');
+        showNotification('Click to comment · Ctrl+Click deep select', 'info', 'click-instruction');
       }
       
       // Enter comment mode
@@ -4742,4 +5285,18 @@ JSON stores relative paths like \`./screenshots/file.png\`, but actual files are
       console.log('🔧 Moat: Already in drawing mode or comment mode');
     }
   });
-})(); 
+
+  // The native panel owns a port only while it is showing this tab.
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'drawbridge-sidepanel') return;
+    sidePanelConnections++;
+    port.onDisconnect.addListener(() => { sidePanelConnections = Math.max(0, sidePanelConnections - 1); });
+  });
+
+  window.__drawbridgeDebug = {
+    build: contentScriptBuild,
+    hasElementPicker: !!window.MoatElementPicker,
+    deepSelect: true
+  };
+  console.info('[Drawbridge] Loaded', window.__drawbridgeDebug);
+})();

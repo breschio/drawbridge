@@ -49,6 +49,11 @@ function createTaskObject(taskData) {
         timestamp: Date.now()
     };
 
+    // Preserve pasted clipboard reference image paths, if any
+    if (taskData.attachments?.length) {
+        task.attachments = taskData.attachments;
+    }
+
     // Preserve bounding box data for freeform rectangles
     if (taskData.boundingBox) {
         task.boundingBox = taskData.boundingBox;
@@ -170,6 +175,7 @@ class TaskStore {
                     selector: taskData.selector || existingTask.selector,
                     boundingRect: taskData.boundingRect || existingTask.boundingRect,
                     screenshotPath: taskData.screenshotPath || existingTask.screenshotPath,
+                    attachments: taskData.attachments || existingTask.attachments,
                     lastModified: Date.now()
                 });
                 console.log(`Updated existing task: ${existingTask.id}`);
@@ -260,6 +266,31 @@ class TaskStore {
     }
 
     /**
+     * Update a task comment
+     * @param {string} id - Task ID to update
+     * @param {string} comment - New comment value
+     * @returns {Object|null} Updated task object or null if not found
+     */
+    updateTaskComment(id, comment) {
+        const normalizedComment = String(comment || '').trim();
+        if (!normalizedComment) {
+            throw new Error('Task comment cannot be empty');
+        }
+
+        const task = this.getTaskById(id);
+        if (!task) {
+            return null;
+        }
+
+        task.comment = normalizedComment;
+        if (Object.prototype.hasOwnProperty.call(task, 'content')) {
+            task.content = normalizedComment;
+        }
+        task.lastModified = Date.now();
+        return task;
+    }
+
+    /**
      * Get task count statistics
      * @returns {Object} Statistics object with total, to do, doing, done counts
      */
@@ -333,13 +364,19 @@ class TaskStore {
             // Prepare JSON data with proper formatting
             const jsonData = JSON.stringify(this.tasks, null, 2);
 
-            // Write to file using File System Access API
+            // Write to file using File System Access API.
+            // Use exclusive mode so the in-place write skips the siloed
+            // swap-and-rename, which produces duplicate numbered files when
+            // the target is held open by another editor.
             const fileHandle = await this.directoryHandle.getFileHandle('moat-tasks-detail.json', { create: true });
 
-            // Use keepExistingData: false to truncate and overwrite
-            const writable = await fileHandle.createWritable({ keepExistingData: false });
+            let writable;
+            try {
+                writable = await fileHandle.createWritable({ mode: 'exclusive', keepExistingData: false });
+            } catch (err) {
+                writable = await fileHandle.createWritable({ keepExistingData: false });
+            }
 
-            // Write new content (file is truncated first)
             await writable.write(jsonData);
             await writable.close();
 
@@ -370,6 +407,20 @@ class TaskStore {
      */
     async updateTaskStatusAndSave(id, status) {
         const task = this.updateTaskStatus(id, status);
+        if (task) {
+            await this.saveTasksToFile();
+        }
+        return task;
+    }
+
+    /**
+     * Update task comment and automatically save to file
+     * @param {string} id - Task ID to update
+     * @param {string} comment - New comment value
+     * @returns {Promise<Object|null>} Promise resolving to updated task or null if not found
+     */
+    async updateTaskCommentAndSave(id, comment) {
+        const task = this.updateTaskComment(id, comment);
         if (task) {
             await this.saveTasksToFile();
         }
@@ -506,6 +557,46 @@ class TaskStore {
     }
 
     /**
+     * Delete all completed tasks and their screenshots, preserving a JSON backup first.
+     * @returns {Promise<Object>} Promise resolving to cleanup results
+     */
+    async deleteCompletedTasks() {
+        if (!this.directoryHandle) {
+            console.warn('Cannot delete completed tasks: no directory handle');
+            return { success: false, deletedCount: 0, screenshotErrors: [] };
+        }
+
+        const completedTasks = this.tasks.filter(task => task.status === TASK_STATUS.DONE);
+
+        if (completedTasks.length === 0) {
+            return { success: true, deletedCount: 0, message: 'No completed tasks to delete' };
+        }
+
+        await this.createBackup();
+
+        const screenshotErrors = [];
+        for (const task of completedTasks) {
+            if (task.screenshotPath) {
+                const deleted = await this.deleteScreenshotFile(task.screenshotPath);
+                if (!deleted) {
+                    screenshotErrors.push(task.id);
+                }
+            }
+        }
+
+        const completedIds = new Set(completedTasks.map(task => task.id));
+        this.tasks = this.tasks.filter(task => !completedIds.has(task.id));
+
+        await this.saveTasksToFile();
+
+        return {
+            success: true,
+            deletedCount: completedTasks.length,
+            screenshotErrors
+        };
+    }
+
+    /**
      * Create backup of current tasks before risky operations
      * @returns {Promise<boolean>} Promise resolving to backup success
      */
@@ -560,4 +651,4 @@ if (typeof module !== 'undefined' && module.exports) {
         validateTaskObject,
         sortTasksByTimestamp
     };
-} 
+}

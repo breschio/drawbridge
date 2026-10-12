@@ -1,230 +1,126 @@
-Drawbridge - Visual annotations for Claude Code and Cursor
-==========================================
+# Drawbridge
 
-Make comments in the browser (like in Figma) and send them to Claude Code and Cursor.  This chrome plugin + cursor ruleset connects your browser to your local development project. Comments made on the front end are batched into a markdown file. Run the command "bridge" to process them in Cursor. Simplify your workflow by adding more context to visual edits with Cursor.
+Visual annotations for AI coding assistants.
 
-🚀 1. Setup
------------
+Drawbridge is a Chrome extension that lets you click on your running app, leave Figma-style comments, capture screenshots, and turn those notes into local task files your AI coding tools can act on.
 
-1.  Download or clone the Drawbridge to your desktop or location of choice
+It is built for browser-to-code feedback loops with Cursor, Claude Code, Codex, and Windsurf.
 
-2.  Go to chrome extensions, switch to dev mode, and unpack the extension drawbridge/chrome-extension
+## What It Does
 
-3.  Activate the plugin
+- Annotate visible UI elements directly in the browser.
+- Draw freeform rectangles for layout, spacing, and visual bugs that are not tied to a single DOM node.
+- Capture selector data, element context, bounding boxes, and screenshots with each note.
+- Sync tasks into your project as readable markdown and structured JSON.
+- Track task status through `to do`, `doing`, and `done`.
+- Deploy the `/bridge` workflow for Claude Code, Codex, and Windsurf, plus Drawbridge workflow rules for AI agents.
+- Recover cleanly after extension reloads: the toolbar icon can inject missing scripts into existing tabs and toggles the existing drawer instead of stacking duplicates.
 
-4.  Pin it for easy access
+## Setup
 
-![db-open-extension](https://github.com/user-attachments/assets/1732a588-5985-45b5-85b6-9a73c21d2b4b)
+### 1. Install The Extension
 
+1. Clone or download this repo.
+2. Open Chrome and go to `chrome://extensions`.
+3. Turn on Developer mode.
+4. Click Load unpacked.
+5. Select this folder: `drawbridge/chrome-extension/`.
+6. Pin Drawbridge from Chrome's Extensions menu.
 
-💬 2. Connect your project
--------------------
+For local `file://` pages, open the Drawbridge extension details in Chrome and enable Allow access to file URLs.
 
-1. Click the icon to open Drawbridge
+![Drawbridge pinned in Chrome](https://github.com/user-attachments/assets/1732a588-5985-45b5-85b6-9a73c21d2b4b)
 
-2. Click "Connect" to open your file browser
+### 2. Connect Your Project
 
-3. Select the local project folder you want to work in
+1. Open the app or page you want to annotate.
+2. Click the Drawbridge toolbar icon.
+3. Click Connect Project in the drawer.
+4. Select the local project root for that app.
+5. Approve Chrome's file access prompt.
 
-4. Grant acess to Drawbridge to edit your file
+Drawbridge creates and maintains files in your project so your AI tool can read the work queue.
 
-5. Drawbridge can now write to its moat-tasks.mdc and moat-task-detail.json files
+### 3. Process The Queue
 
+After adding annotations, open your project in Cursor, Claude Code, Codex, or Windsurf and run `/bridge` or `bridge`.
 
-💬 3. Make Comments
--------------------
+## Annotate
 
-1.  Press `C` in your browser (or click the Tools dropdown → Comment), to turn your cursor into a pointer
+- Press `C`, or use Tools -> Comment, then click an element and leave a note.
+- Press `R`, or use Tools -> Rectangle, then drag over an area and leave a note.
+- Press `Esc` to exit an annotation mode.
+- Click the Drawbridge toolbar icon to open or close the drawer.
 
-2.  Hover over your page to see selectable DOM elements you can leave comments on
+Tasks appear in the drawer and sync to your connected project.
 
-3.  Click an element to leave a comment, type your comment, hit `Submit` or press `Enter`
+![Drawbridge comment annotation](https://github.com/breschio/drawbridge-media/blob/main/drawbridge-comment-2.gif?raw=true)
 
-4.  Tasks will be shown in the `Moat` area on the bottom of the page
+![Drawbridge rectangle annotation](https://github.com/breschio/drawbridge-media/raw/main/drawbridge-rectangle.gif)
 
-5. Tasks will also be synced to Cursor
+## Drawer Layout
 
-![db-comments-1](https://github.com/breschio/drawbridge-media/blob/main/drawbridge-comment-2.gif?raw=true)
+Drawbridge can dock to the bottom, left, or right side of the viewport from the More menu. Use the chevron button to collapse or expand the drawer.
 
+When collapsed on the left or right side, Drawbridge becomes a slim rail with the project button, tools button, and color-coded task counts for `to do`, `doing`, and `done`. The chevron points in the direction the drawer will collapse or expand.
 
-📐 4. Draw Rectangles (Freeform Annotations)
-----------------------------------------------
+## Process Tasks
 
-1.  Press `R` in your browser (or click the Tools dropdown → Rectangle), to enter rectangle drawing mode
+In an AI coding tool, run:
 
-2.  Your cursor will change to a crosshair, indicating you're in drawing mode
+```text
+/bridge
+```
 
-3.  Click and drag on the page to draw a rectangle around the area you want to annotate
+or:
 
-4.  Release the mouse button to finalize the rectangle - a comment box will appear at your cursor
+```text
+bridge
+```
 
-5.  Type your comment and hit `Submit` or press `Enter`
+Supported modes:
 
-6.  The rectangle coordinates and screenshot will be saved with your task
+- `step bridge`: process one task at a time with approval.
+- `batch bridge`: group related tasks and process them together.
+- `yolo bridge`: process all pending tasks autonomously.
 
-**Keyboard Shortcuts:**
-- Press `C` to switch to Comment mode (pointer cursor)
-- Press `R` to switch to Rectangle mode (crosshair cursor)
-- Press `Esc` to exit either mode
-- You can toggle between modes with `C` and `R` before starting an interaction
+![Drawbridge processing tasks](https://github.com/user-attachments/assets/da71b412-eee4-4cec-abe5-3b9719e297b2)
 
-![db-rectangle-drawing](https://github.com/breschio/drawbridge-media/raw/main/drawbridge-rectangle.gif)
+## Generated Files
 
+Drawbridge writes these into the connected project:
 
+- `.moat/moat-tasks.md`: human-readable task list.
+- `.moat/moat-tasks-detail.json`: structured task data for AI processing.
+- `.moat/screenshots/`: screenshots captured with annotations.
+- `.moat/drawbridge-workflow.md`: agent workflow instructions.
+- `.claude/commands/bridge.md`: Claude Code slash command.
+- `.windsurf/workflows/bridge.md`: Windsurf workflow.
+- `.codex/prompts/bridge.md`: Codex prompt.
 
-🤖 5. Process with AI
------------------------
+Drawbridge also updates `.gitignore` for generated local workflow folders.
 
-Drawbridge works with **Cursor** and **Claude Code**:
+## Development
 
-### In Cursor
+```bash
+npm ci
+npm test -- chrome-extension/background.test.js --runInBand
+npm run build
+```
 
-1.  **Run Drawbridge**: In your editor, simply run the command:
+The build output is written to `dist/drawbridge-v<version>.zip`.
 
-    ```
-    bridge
-    ```
+## Troubleshooting
 
-2.  **Drawbridge** will analyze your tasks, understand dependencies, and begin making edits.
+- If the icon does nothing after reloading the extension, click it once on the page again. Drawbridge now injects missing scripts into existing tabs.
+- If the drawer looks stale, close and reopen it with the toolbar icon.
+- If project files are missing, reconnect the project from the drawer.
+- If an AI tool cannot find tasks, confirm the project contains `.moat/moat-tasks.md` and `.moat/moat-tasks-detail.json`.
 
-3.  **Approve**: By default, drawbridge processes tasks in **Step** mode - one at a time. You may be asked for approval:
+## License
 
-    1.  To begin the task
+This project uses a custom license. See [LICENSE](LICENSE).
 
-    2.  To finish the task (updates the status in moat-tasks.md and moat-tasks-detail.json)
+Free to use, copy, and modify for lawful purposes. Redistribution, sublicensing, selling, or offering as a commercial service are not permitted without a commercial license.
 
-4.  **Wait:** You can watch your tasks get updated in the **moat-tasks.md**
-
-5. IF you run into trouble with "bridge" simply be more explicit by saying "use @drawbridge-workflow.mdc to process @moat-tasks.mdc"
-
-![db-process-tasks](https://github.com/user-attachments/assets/da71b412-eee4-4cec-abe5-3b9719e297b2)
-
-### In Claude Code
-
-1.  **Run the slash command** (works in terminal or Cursor with Claude Code):
-
-    ```
-    /bridge
-    ```
-
-2.  **Choose mode**: Claude will ask for your preferred processing mode:
-    -   **step**: One task at a time with approval
-    -   **batch**: Group related tasks together
-    -   **yolo**: Process all tasks autonomously
-
-3.  **Automatic Setup**: The `/bridge` command is automatically deployed to `.claude/commands/` when you connect your project
-
-**Claude Code Features:**
--   ✅ **Smart error messages** - Helpful guidance if tasks aren't found
--   ✅ **File references** - Tasks include file paths for easy navigation
--   ✅ **Screenshot support** - Visual context from browser annotations
--   ✅ **Git-safe** - Automatically adds `.claude/` and `.moat/` to `.gitignore`
--   ✅ **Status tracking** - Follows `"to do" → "doing" → "done"` lifecycle
-
-
-👩🏼‍🎨 6. Review your changes
-------------------------------
-
-1.  Go back to your browser to see your changes
-
-    1.  Should be automatic if you're using react / next.js
-
-    2.  Refresh the page if you're using html / css / js
-
-2.  Continue making edits to refine your work!
-
-![db-tasks-complete](https://github.com/user-attachments/assets/799c0ad6-da98-4506-8f12-ad338aa1aba3)
-
-
-
-📁 Core Files
--------------
-
--   **`drawbridge-workflow.mdc`**: The main ruleset for the AI. This is where Drawbridge's "brain" is defined.
-
--   **`moat-tasks.md`**: A human-readable list of your pending tasks.
-
--   **`moat-tasks-detail.json`**: The raw, detailed data for each task, including selectors and screenshot paths.
-
--   **`/screenshots`**: Visual context for each annotation, used by the AI to understand your intent.
-
-
-🎯 Example Workflow
--------------------
-
-1.  **Annotate**:
-
-    -   Click a button → "make this green".
-
-    -   Click the same button → "add more padding".
-
-2.  **Process**: In your editor, run `bridge`.
-
-3.  **AI Analyzes**:
-
-    ```
-    🤖 Dependency detected. Processing "make this green" before "add more padding".
-
-    ```
-
-4.  **Review**: The AI reviews your **moat-tasks-detail.json** for details of your comment.
-
-5.  **Approve**: You reply `yes`.
-
-6.  **Repeat**: The AI proceeds to the next dependent task.
-
-
-🛠️ Advanced Usage & Processing Modes
--------------------------------------
-
-You can control how Drawbridge processes tasks by specifying a mode.
-
--   **`step bridge`** (Default: Safe & Incremental)
-
-    -   Processes tasks one by one, asking for approval at each step. Perfect for complex changes.
-
--   **`batch bridge`** (Efficient & Grouped)
-
-    -   Intelligently groups related tasks (e.g., all button styles) and processes them together, asking for a single approval per batch.
-
--   **`yolo bridge`** (Autonomous & Fast)
-
-    -   **Use with caution.** Processes *all* pending tasks in the correct dependency order *without stopping for approvals*. A full summary is provided at the end.
-
-
-🎨 Best Practices for Annotations
----------------------------------
-
--   **Be Specific**: "change font to sans-serif" is better than "change font".
-
--   **Chain Your Thoughts**: For multi-step changes, create separate but related annotations. The AI is smart enough to understand the order.
-
-    -   *Good*: 1. "make button blue" → 2. "add shadow to the blue button"
-
-    -   *Bad*: 1. "make button blue and add a shadow"
-
--   **Focus on One Thing**: One annotation should represent one distinct change.
-
-
-🐛 Troubleshooting
-------------------
-
--   **"Dependency Error"**: This means tasks might be out of order. Check the AI's analysis to see the required sequence.
-
--   **Task `failed` Status**: If a task fails (especially in `yolo` mode), check `moat-tasks.md`. You can reset its status to `pending` in the `.json` file to retry.
-
--   **Connection Issues**: If Drawbridge can't find tasks, press `Cmd/Ctrl+Shift+P` in your browser and re-select your project directory to reconnect.
-
-**Happy building with Drawbridge!** 🎯
-
-📄 License
-----------
-
-This project is licensed under a custom license. See the [LICENSE](LICENSE) file for details.
-
-**Key points:**
-- ✅ Free to use, copy, and modify for any lawful purpose
-- ❌ No redistribution, sublicensing, or selling
-- ❌ Cannot be offered as a commercial service
-
-For commercial licensing inquiries: breschicreative@gmail.com
+Commercial licensing: breschicreative@gmail.com
